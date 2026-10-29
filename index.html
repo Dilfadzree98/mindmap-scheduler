@@ -235,7 +235,21 @@ aside h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center
   display: block; width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--bg);
 }
-#details input[type=color] { padding: 2px; height: 36px; }
+#details .swatches { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+#fSwatches { display: contents; }
+#details .swatch {
+  position: relative; display: grid; place-items: center; width: 24px; height: 24px; margin: 0; padding: 0;
+  border: none; border-radius: 50%; background: var(--c); color: #fff; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15) inset;
+}
+#details .swatch:hover { transform: scale(1.12); }
+#details .swatch.on { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--c); }
+#details .swatch svg { width: 14px; height: 14px; stroke-width: 3; }
+#details .swatch.inherit { background: transparent; color: var(--c); box-shadow: 0 0 0 2px var(--c) inset; }
+#details .swatch.inherit.on { box-shadow: 0 0 0 2px var(--c) inset, 0 0 0 2px var(--panel), 0 0 0 4px var(--c); }
+#details .swatch.custom { background: conic-gradient(#e5484d, #d98a00, #84cc16, #14b8a6, #0ea5e9, #5b6cff, #a855f7, #ec4899, #e5484d); }
+#details .swatch.custom.on { background: var(--c); }
+#details .swatch.custom input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
 #details textarea { resize: vertical; }
 #details .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 #details .chkrow { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
@@ -441,11 +455,11 @@ body.dropping::after {
     <label class="chkrow"><input type="checkbox" id="fDone"> Done</label>
     <label id="doneWrap" hidden>Completed on<input type="date" id="fDoneAt"></label>
     <div id="fProg"></div>
-    <div class="two">
-      <label>Type
-        <select id="fType"><option value="project">Project</option><option value="idea">Idea</option><option value="task">Task</option></select>
-      </label>
-      <label>Color<input type="color" id="fColor"></label>
+    <label>Type
+      <select id="fType"><option value="project">Project</option><option value="idea">Idea</option><option value="task">Task</option></select>
+    </label>
+    <div class="flabel">Color
+      <div class="swatches"><span id="fSwatches"></span><label class="swatch custom" title="Pick any colour"><input type="color" id="fColor" aria-label="Pick any colour"></label></div>
     </div>
     <div id="teamFields">
       <div class="flabel">Teams
@@ -533,6 +547,8 @@ body.dropping::after {
 const STORE = 'mindmap-scheduler-v1';
 const THEME_KEY = 'mindmap-scheduler-theme';
 const PALETTE = ['#5b6cff', '#e5484d', '#1f9d55', '#d98a00', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6'];
+// ready-made choices in the panel's colour row
+const SWATCHES = [...PALETTE, '#f97316', '#84cc16', '#8b5e3c', '#64748b'];
 const $ = s => document.querySelector(s);
 const vp = $('#viewport');
 
@@ -1013,6 +1029,19 @@ function renderAgenda() {
       `<option value="-"${agPerson === '-' ? ' selected' : ''}>Unassigned</option></select></label>` : '') +
     (body || `<p class="empty">${agPerson ? 'Nothing here for this selection.' : 'Nothing scheduled yet. Select a task and set a due date.'}</p>`);
 }
+function renderSwatches(n) {
+  const cur = colorOf(n).toLowerCase(), own = n.color?.toLowerCase();
+  const parent = n.parentId && byId.get(n.parentId);
+  const sw = (c, cls, title, on) =>
+    `<button class="swatch ${cls}${on ? ' on' : ''}" data-c="${c}" style="--c:${c || colorOf(parent)}" title="${title}" aria-label="${title}" aria-pressed="${on}">${on ? icon('check') : ''}</button>`;
+  // sub-items can follow their parent's colour (changes with it); main items always have their own
+  $('#fSwatches').innerHTML = (parent ? sw('', 'inherit', 'Same as parent', !own) : '') +
+    SWATCHES.map(c => sw(c, '', c, own === c)).join('');
+  const custom = $('.swatch.custom');
+  const isCustom = !!own && !SWATCHES.includes(own);
+  custom.classList.toggle('on', isCustom);
+  custom.style.setProperty('--c', cur);
+}
 function setVal(el, v) { if (document.activeElement !== el && el.value !== v) el.value = v; }
 function renderPanel() {
   const n = sel && byId.get(sel);
@@ -1074,6 +1103,7 @@ function renderPanel() {
   $('#peopleList').innerHTML = people.map(p => `<option value="${esc(p)}">`).join('');
   setVal($('#fType'), n.type);
   setVal($('#fColor'), colorOf(n));
+  renderSwatches(n);
   setVal($('#fStart'), n.startDate || '');
   setVal($('#fDue'), n.dueDate || '');
   $('#fDone').checked = n.done;
@@ -1939,6 +1969,15 @@ $('#fAssignNew').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
 });
 editField($('#fColor'), (n, v) => n.color = v);
+$('#fSwatches').addEventListener('click', e => {
+  const b = e.target.closest('.swatch'), n = byId.get(sel);
+  if (!b || !n) return;
+  const c = b.dataset.c || null;
+  if ((n.color || null) === c) return;
+  snapshot();
+  n.color = c;
+  render();
+});
 const changeField = (el, apply) => el.addEventListener('change', () => {
   const n = byId.get(sel);
   if (!n) return;
