@@ -1546,6 +1546,8 @@ let drag = null;
 vp.addEventListener('pointerdown', e => {
   if (e.button !== 0 && e.button !== 1) return;
   if (e.target.closest('button, a, .zoombar') || e.target.isContentEditable) return;
+  // clicking the map takes the cursor out of any side-panel field, so shortcuts work straight away
+  if (isTyping(document.activeElement) && !document.activeElement.closest('.node')) document.activeElement.blur();
   const card = e.target.closest('.node');
   drag = { sx: e.clientX, sy: e.clientY, moved: false };
   if (card) {
@@ -1645,6 +1647,14 @@ $('#agenda').addEventListener('change', e => {
 // keep buttons from holding focus, so Space/Enter go to the map shortcuts
 document.addEventListener('click', e => { if (e.target.closest('button')) e.target.closest('button').blur(); });
 
+// shortcuts stay off only while the cursor is in a field you type into (not dropdowns, ticks or dates)
+const TYPED = ['text', 'search', 'email', 'url', 'tel', 'number', 'password'];
+const isTyping = t => t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && TYPED.includes(t.type));
+function arrangeMap() {
+  autoArrange();
+  fitView();
+  toast('Map arranged');
+}
 document.addEventListener('keydown', e => {
   const t = e.target;
   if (!$('#viewer').hidden) { if (e.key === 'Escape') $('#viewer').hidden = true; return; }
@@ -1659,7 +1669,7 @@ document.addEventListener('keydown', e => {
     }
     return;
   }
-  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable) return;
+  if (isTyping(t)) return;
   if (e.ctrlKey || e.metaKey) {
     const k = e.key.toLowerCase();
     if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
@@ -1667,7 +1677,7 @@ document.addEventListener('keydown', e => {
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   // R tidies the whole map; it doesn't need a selection
-  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); autoArrange(); fitView(); return; }
+  if (e.code === 'KeyR' || e.key === 'r' || e.key === 'R') { e.preventDefault(); t.blur?.(); arrangeMap(); return; }
   if (!sel || !byId.get(sel)) return;
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
@@ -1680,7 +1690,7 @@ document.addEventListener('keydown', e => {
 /* ---------- Toolbar ---------- */
 $('#addProject').onclick = () => addRoot('project');
 $('#addIdea').onclick = () => addRoot('idea');
-$('#arrange').onclick = () => { autoArrange(); fitView(); };
+$('#arrange').onclick = arrangeMap;
 $('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); };
 $('#agendaBtn').onclick = () => { agendaOpen = !agendaOpen; $('#agendaBtn').setAttribute('aria-pressed', agendaOpen); renderAgenda(); };
 $('#undoBtn').onclick = undo;
