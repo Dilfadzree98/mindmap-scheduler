@@ -1,0 +1,70 @@
+{
+  "_howTo": [
+    "Copy this file, edit it in Notepad, save, then in the app click Import (or drag the file onto the map) and choose 'Add to my map'.",
+    "Each item in 'nodes' is one card. Give every card a unique 'id' (any short text, e.g. 't1', 't2').",
+    "'parentId' is the id of the card it sits under. Use null for a main project or idea.",
+    "'type' is 'project', 'idea' or 'task'.",
+    "Dates are written YYYY-MM-DD, e.g. 2026-11-30. Use null for no date.",
+    "'assignee' is one person's name. 'assigneeTeam' is a team id from 'teams' (use one or the other, or neither).",
+    "'teamIds' (on projects and ideas) lists the team ids working on it. 'members' lists extra people by name.",
+    "You can leave out any field you don't need. Positions are worked out by the app.",
+    "Keep the commas and quotes exactly like the examples: a missing comma makes the file invalid.",
+    "This _howTo section is ignored by the app, so you can delete it or leave it."
+  ],
+  "version": 1,
+  "teams": [
+    { "id": "team1", "name": "Design team", "members": ["Alex", "Sam"] }
+  ],
+  "nodes": [
+    {
+      "id": "p1",
+      "parentId": null,
+      "type": "project",
+      "title": "My new project",
+      "notes": "What this project is about.",
+      "teamIds": ["team1"],
+      "members": [],
+      "startDate": "2026-11-02",
+      "dueDate": "2026-11-30"
+    },
+    {
+      "id": "t1",
+      "parentId": "p1",
+      "type": "task",
+      "title": "First task",
+      "notes": "Details for the first task.",
+      "assignee": "Alex",
+      "startDate": "2026-11-02",
+      "dueDate": "2026-11-06"
+    },
+    {
+      "id": "t1a",
+      "parentId": "t1",
+      "type": "task",
+      "title": "Sub-task of the first task",
+      "dueDate": "2026-11-04"
+    },
+    {
+      "id": "t2",
+      "parentId": "p1",
+      "type": "task",
+      "title": "Second task, done by the whole team",
+      "assigneeTeam": "team1",
+      "dueDate": "2026-11-13"
+    },
+    {
+      "id": "t3",
+      "parentId": "p1",
+      "type": "task",
+      "title": "A task that is already finished",
+      "done": true
+    },
+    {
+      "id": "i1",
+      "parentId": null,
+      "type": "idea",
+      "title": "An idea for later",
+      "notes": "Ideas work the same way as projects."
+    }
+  ]
+}

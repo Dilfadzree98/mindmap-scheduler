@@ -1829,6 +1829,8 @@ async function importFile(f) {
     state = d;
     sel = null;
     render();
+    // hand-written files often leave out x/y: lay the cards out instead of stacking them
+    if (new Set(d.nodes.map(n => n.x + ',' + n.y)).size < d.nodes.length) autoArrange(true);
     fitView();
     toast('Map replaced — Ctrl+Z to undo');
   } else {
