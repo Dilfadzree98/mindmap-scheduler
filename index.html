@@ -2012,7 +2012,20 @@ $('#installBtn').onclick = async () => {
 window.addEventListener('appinstalled', () => {
   $('#installBtn').hidden = true;
   toast('Installed — find Mind Map Scheduler in your Start menu');
+  protectStorage(); // browsers usually grant this once the app is installed
 });
+
+/* ---------- Ask the browser to keep this app's data even when the disk runs low ---------- */
+// Chrome/Edge/Brave decide silently (usually yes for installed apps); the Export tooltip shows the result.
+let storageProtected = null;
+async function protectStorage() {
+  if (!navigator.storage?.persist) return;
+  try { storageProtected = (await navigator.storage.persisted()) || (await navigator.storage.persist()); } catch (e) { storageProtected = null; }
+  $('#exportBtn').title = storageProtected
+    ? 'Download a backup. Your data in this browser is protected from automatic clean-up.'
+    : 'Download a backup. Recommended: this browser may clear the app\'s data if your disk gets full — installing the app usually protects it.';
+}
+protectStorage();
 </script>
 </body>
 </html>
