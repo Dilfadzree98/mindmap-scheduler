@@ -402,7 +402,7 @@ body.dropping::after {
   <div class="tb">
     <button class="btn primary" id="addProject" title="New project"><span data-i="plus"></span>Project</button>
     <button class="btn" id="addIdea" title="New idea"><span data-i="bulb"></span>Idea</button>
-    <button class="btn" id="arrange" title="Tidy up the layout"><span data-i="workflow"></span>Arrange</button>
+    <button class="btn" id="arrange" title="Tidy up the layout (R)"><span data-i="workflow"></span>Arrange</button>
     <button class="btn" id="hideDone" aria-pressed="false" title="Hide completed items"><span data-i="eyeOff"></span>Hide done</button>
     <button class="btn" id="agendaBtn" aria-pressed="true" title="Show or hide the side panel"><span data-i="panel"></span>Sidebar</button>
     <button class="btn" id="teamsBtn" title="Create teams and add people to them"><span data-i="users"></span>Teams</button>
@@ -486,7 +486,7 @@ body.dropping::after {
       <kbd>Tab</kbd> add sub-task · <kbd>Enter</kbd> add sibling<br>
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
-      <kbd>Esc</kbd> deselect<br>
+      <kbd>R</kbd> arrange the map · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
     </div>
   </aside>
@@ -1665,7 +1665,10 @@ document.addEventListener('keydown', e => {
     if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
   }
-  if (!sel || !byId.get(sel) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // R tidies the whole map; it doesn't need a selection
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); autoArrange(); fitView(); return; }
+  if (!sel || !byId.get(sel)) return;
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
     e: () => toggleExpand(sel), E: () => toggleExpand(sel),
