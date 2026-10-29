@@ -150,6 +150,29 @@ button.pill:hover { color: var(--text); }
 }
 .node:hover .add, .node.selected .add { display: block; }
 
+/* expanded card: notes + attachments shown on the canvas */
+.node.expanded { min-width: 240px; max-width: 320px; }
+.pill.xp.on { color: var(--accent); border-color: currentColor; }
+.xbody { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12.5px; font-weight: 400; line-height: 1.45; }
+.xnotes {
+  white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); cursor: auto;
+  display: -webkit-box; -webkit-line-clamp: 12; -webkit-box-orient: vertical; overflow: hidden;
+}
+.xnotes a { color: var(--accent); }
+.xthumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.xthumb { width: 64px; height: 64px; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--hover); cursor: zoom-in; }
+.xthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.xdocs { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.xdoc {
+  display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--text); font-size: 12px; text-align: left;
+}
+.xdoc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xdoc .i { width: 13px; height: 13px; color: var(--muted); }
+.xdoc:hover span { color: var(--accent); text-decoration: underline; }
+.xfile.missing { opacity: .45; }
+.node.done .xbody { text-decoration: none; }
+
 /* ---------- Canvas overlay controls ---------- */
 .zoombar {
   position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; align-items: center;
@@ -459,7 +482,8 @@ body.dropping::after {
     <div class="keys">
       <kbd>Tab</kbd> add sub-task · <kbd>Enter</kbd> add sibling<br>
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
-      <kbd>Del</kbd> delete · <kbd>Esc</kbd> deselect<br>
+      <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
+      <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
     </div>
   </aside>
@@ -533,6 +557,7 @@ const ICONS = {
   check: '<path d="M20 6 9 17l-5-5"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  chevronUp: '<path d="m18 15-6-6-6 6"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
   clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
@@ -643,6 +668,8 @@ const teamBadge = t => `<span class="av team" style="background:${t.color}" titl
 const avatarStack = names => !names.length ? '' :
   `<span class="avs" title="${esc(names.join(', '))}">${names.slice(0, 4).map(avatar).join('')}` +
   `${names.length > 4 ? `<span class="av more">+${names.length - 4}</span>` : ''}</span>`;
+// notes as safe HTML with web links made clickable
+const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 const matches = (n, q) => [n.title, n.notes, n.assignee, teamById(n.teamId)?.name, teamById(n.assigneeTeam)?.name, ...n.members]
   .join(' ').toLowerCase().includes(q);
 const cleanNames = a => Array.isArray(a)
@@ -661,7 +688,7 @@ function toast(msg) {
 function makeNode(o) {
   return Object.assign({
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
-    teamId: null, members: [], assignee: '', assigneeTeam: null, attachments: [],
+    teamId: null, members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
     done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null
   }, o);
 }
@@ -730,7 +757,7 @@ function sanitize(d) {
       })),
       x: +r.x || 0, y: +r.y || 0,
       color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : null,
-      done: !!r.done, collapsed: !!r.collapsed,
+      done: !!r.done, collapsed: !!r.collapsed, expanded: !!r.expanded,
       startDate: isDate(r.startDate) ? r.startDate : null,
       dueDate: isDate(r.dueDate) ? r.dueDate : null,
       createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null
@@ -781,7 +808,8 @@ function load() {
 function cardFor(n, memo, q) {
   const el = document.createElement('div');
   const ch = childrenOf(n.id);
-  el.className = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '');
+  el.className = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '') +
+    (n.expanded && (n.notes.trim() || n.attachments.length) ? ' expanded' : '');
   if (q) el.classList.add(matches(n, q) ? 'match' : 'dim');
   el.dataset.id = n.id;
   el.style.left = n.x + 'px';
@@ -800,8 +828,11 @@ function cardFor(n, memo, q) {
   const di = n.done && n.doneAt ? null : dueInfo(n);
   if (di) meta.push(`<span class="pill due ${di.cls}" title="${n.startDate ? 'Start ' + shortDate(n.startDate) + ' · ' : ''}Due ${shortDate(n.dueDate)}">${icon('calendar')}${di.txt}</span>`);
   else if (n.startDate) meta.push(`<span class="pill" title="Start date">${icon('clock')}${shortDate(n.startDate)}</span>`);
-  if (n.notes) meta.push(`<span class="pill" title="Has notes">${icon('notes')}</span>`);
-  if (n.attachments.length) meta.push(`<span class="pill" title="${esc(n.attachments.map(a => a.name).join(', '))}">${icon('clip')}${n.attachments.length}</span>`);
+  const hasDetails = n.notes.trim() || n.attachments.length;
+  if (hasDetails) meta.push(n.expanded
+    ? `<button class="pill xp on" title="Hide details (E)">${icon('chevronUp')}Hide details</button>`
+    : `<button class="pill xp" title="Show notes and attachments (E)">${n.notes.trim() ? icon('notes') : ''}` +
+      `${n.attachments.length ? icon('clip') + n.attachments.length : ''}${icon('chevronDown')}</button>`);
   if (n.remark) meta.push(`<span class="pill remark" title="Remark: ${esc(n.remark)}">${icon('remark')}Remark</span>`);
   if (!n.parentId) {
     const team = teamById(n.teamId);
@@ -818,6 +849,15 @@ function cardFor(n, memo, q) {
     const p = prog(n, memo), pct = Math.round(p.done / p.total * 100);
     html += `<div class="prog${pct === 100 ? ' full' : ''}"><div class="bar"><i style="width:${pct}%"></i></div><span>${p.done}/${p.total} · ${pct}%</span></div>`;
   }
+  if (n.expanded && hasDetails) {
+    const imgs = n.attachments.map((a, i) => [a, i]).filter(([a]) => a.type.startsWith('image/'));
+    const others = n.attachments.map((a, i) => [a, i]).filter(([a]) => !a.type.startsWith('image/'));
+    html += '<div class="xbody">' +
+      (n.notes.trim() ? `<div class="xnotes">${linkify(n.notes.trim())}</div>` : '') +
+      (imgs.length ? `<div class="xthumbs">${imgs.map(([a, i]) => `<button class="xfile xthumb" data-idx="${i}" title="${esc(a.name)}"><img alt="" data-fid="${a.id}"></button>`).join('')}</div>` : '') +
+      (others.length ? `<div class="xdocs">${others.map(([a, i]) => `<button class="xfile xdoc" data-idx="${i}" title="Open ${esc(a.name)}">${icon('file')}<span>${esc(a.name)}</span></button>`).join('')}</div>` : '') +
+      '</div>';
+  }
   html += '<button class="add" title="Add sub-task (Tab)">+</button>';
   el.innerHTML = html;
   return el;
@@ -829,6 +869,9 @@ function render() {
   for (const n of state.nodes) if (isVisible(n)) layer.appendChild(cardFor(n, memo, q));
   sizes = new Map();
   for (const el of layer.children) sizes.set(el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight });
+  // thumbnails have a fixed size, so loading them later doesn't change the measured card height
+  for (const img of layer.querySelectorAll('img[data-fid]'))
+    fileUrl(img.dataset.fid).then(u => { if (u) img.src = u; else img.closest('.xfile').classList.add('missing'); });
   drawEdges();
   renderStats(memo);
   renderAgenda();
@@ -1076,6 +1119,16 @@ function focusNode(id) {
 const cardEl = id => document.querySelector(`.node[data-id="${id}"]`);
 
 /* ---------- Actions ---------- */
+// Show/hide notes + attachments on the card, then re-tidy the map so the taller card
+// never sits on top of other cards. One undo step covers both.
+function toggleExpand(id) {
+  const n = byId.get(id);
+  if (!n || !(n.notes.trim() || n.attachments.length)) { if (n) toast('Add notes or attachments to show them on the card'); return; }
+  snapshot();
+  n.expanded = !n.expanded;
+  render();
+  autoArrange(true);
+}
 // selection only touches classes + panel, so the card DOM survives for double-click
 function select(id) {
   sel = id;
@@ -1471,7 +1524,7 @@ function setHideDone(v) {
 let drag = null;
 vp.addEventListener('pointerdown', e => {
   if (e.button !== 0 && e.button !== 1) return;
-  if (e.target.closest('button, .zoombar') || e.target.isContentEditable) return;
+  if (e.target.closest('button, a, .zoombar') || e.target.isContentEditable) return;
   const card = e.target.closest('.node');
   drag = { sx: e.clientX, sy: e.clientY, moved: false };
   if (card) {
@@ -1525,7 +1578,7 @@ vp.addEventListener('wheel', e => {
 vp.addEventListener('dblclick', e => {
   if (e.target.closest('.zoombar')) return;
   const card = e.target.closest('.node');
-  if (card) { if (!e.target.closest('button')) startRename(card.dataset.id); }
+  if (card) { if (!e.target.closest('button, a, .xbody')) startRename(card.dataset.id); }
   else addRoot('idea', toWorld(e.clientX, e.clientY));
 });
 $('#nodes').addEventListener('click', e => {
@@ -1535,6 +1588,11 @@ $('#nodes').addEventListener('click', e => {
   if (e.target.closest('.chk')) toggleDone(id);
   else if (e.target.closest('.add')) addChild(id);
   else if (e.target.closest('.tog')) { snapshot(); const n = byId.get(id); n.collapsed = !n.collapsed; render(); }
+  else if (e.target.closest('.xp')) toggleExpand(id);
+  else if (e.target.closest('.xfile')) {
+    const a = byId.get(id)?.attachments[+e.target.closest('.xfile').dataset.idx];
+    if (a) openAttachment(a);
+  }
 });
 $('#agenda').addEventListener('click', e => {
   const tab = e.target.closest('.side-tab');
@@ -1586,9 +1644,10 @@ document.addEventListener('keydown', e => {
     if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
     if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
   }
-  if (!sel || !byId.get(sel)) return;
+  if (!sel || !byId.get(sel) || e.ctrlKey || e.metaKey || e.altKey) return;
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
+    e: () => toggleExpand(sel), E: () => toggleExpand(sel),
     Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
