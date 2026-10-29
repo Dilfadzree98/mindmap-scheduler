@@ -1,0 +1,1929 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mind Map Scheduler</title>
+<meta name="description" content="Plan projects and ideas as a mind map: tasks, due dates, teams, progress and attachments.">
+<meta name="theme-color" content="#5b6cff">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root {
+  --bg: #f5f6fa; --grid: #d9dde8; --panel: #ffffff; --text: #1d2433; --muted: #6b7385;
+  --border: #dde1ea; --card: #ffffff; --accent: #5b6cff; --ok: #1f9d55; --warn: #c27a00; --bad: #e5484d;
+  --shadow: 0 2px 10px rgba(20, 30, 60, .08); --hover: #f0f2f8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11141b; --grid: #262c38; --panel: #181c25; --text: #e6e9f0; --muted: #8a92a6;
+    --border: #2a303c; --card: #1f2430; --accent: #7c8aff; --ok: #3ccf7e; --warn: #f0a92c; --bad: #ff6b6f;
+    --shadow: 0 2px 12px rgba(0, 0, 0, .4); --hover: #252b38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11141b; --grid: #262c38; --panel: #181c25; --text: #e6e9f0; --muted: #8a92a6;
+  --border: #2a303c; --card: #1f2430; --accent: #7c8aff; --ok: #3ccf7e; --warn: #f0a92c; --bad: #ff6b6f;
+  --shadow: 0 2px 12px rgba(0, 0, 0, .4); --hover: #252b38; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--text); display: flex; flex-direction: column; overflow: hidden;
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+/* ---------- Header ---------- */
+header {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px;
+  background: var(--panel); border-bottom: 1px solid var(--border); z-index: 10;
+}
+.i { width: 16px; height: 16px; flex: none; vertical-align: -3px; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; margin-right: 6px; white-space: nowrap; }
+.brand .i { width: 20px; height: 20px; color: var(--accent); }
+.tb { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 6px 10px;
+  white-space: nowrap;
+}
+.btn.icon { padding: 6px 8px; }
+.btn[hidden] { display: none; }
+.search { position: relative; display: flex; align-items: center; }
+.search .i { position: absolute; left: 9px; width: 15px; height: 15px; color: var(--muted); pointer-events: none; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.danger { color: var(--bad); }
+#search {
+  border: 1px solid var(--border); background: var(--bg); border-radius: 8px; padding: 6px 10px 6px 30px; width: 180px;
+}
+.stats { margin-left: auto; display: flex; align-items: center; gap: 10px; color: var(--muted); white-space: nowrap; }
+.stats .bar { width: 110px; }
+.stats b { color: var(--text); }
+.stats .od b { color: var(--bad); }
+
+/* ---------- Layout ---------- */
+main { flex: 1; display: flex; min-height: 0; position: relative; }
+aside {
+  width: 300px; flex: none; background: var(--panel); border: 0 solid var(--border); overflow-y: auto; padding: 14px;
+}
+#agenda { border-right-width: 1px; }
+#details { border-left-width: 1px; }
+aside[hidden] { display: none; }
+#viewport {
+  flex: 1; position: relative; overflow: hidden; touch-action: none; cursor: default; user-select: none;
+  background-image: radial-gradient(var(--grid) 1.2px, transparent 1.3px);
+}
+#viewport.panning { cursor: grabbing; }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+#edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+#edges path { fill: none; stroke-width: 2.2; opacity: .55; stroke-linecap: round; }
+#edges path.done { opacity: .22; stroke-dasharray: 5 5; }
+
+/* ---------- Node cards ---------- */
+.node {
+  position: absolute; width: max-content; min-width: 150px; max-width: 240px; background: var(--card);
+  border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 10px;
+  padding: 8px 10px; box-shadow: var(--shadow); cursor: grab; user-select: none;
+  transition: opacity .25s, box-shadow .15s;
+}
+.node:hover { box-shadow: 0 4px 16px rgba(20, 30, 60, .14); }
+.node.root { min-width: 190px; padding: 10px 12px; border: 2px solid var(--c); border-left-width: 6px; font-size: 15px; font-weight: 600; }
+.node.selected { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 2; }
+.node.done { opacity: .55; }
+.node.dim { opacity: .25; }
+.node.match { box-shadow: 0 0 0 3px #ffd84d, var(--shadow); }
+.node.flash { animation: flash 1s ease; }
+.node.just-done { animation: pop .45s ease; }
+@keyframes flash { 0%, 100% { box-shadow: var(--shadow); } 30% { box-shadow: 0 0 0 6px var(--accent); } }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.row { display: flex; gap: 8px; align-items: flex-start; }
+.chk {
+  flex: none; width: 20px; height: 20px; border-radius: 6px; border: 2px solid var(--c); background: transparent;
+  display: grid; place-items: center; padding: 0; font-size: 13px; font-weight: 800; line-height: 1; color: #fff; margin-top: 1px;
+}
+.chk:hover { background: color-mix(in srgb, var(--c) 18%, transparent); }
+.chk .i { width: 13px; height: 13px; stroke-width: 3.5; }
+.done > .row .chk { background: var(--ok); border-color: var(--ok); }
+.tw { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ic { margin-right: 6px; color: var(--c); }
+.ic .i { width: 15px; height: 15px; vertical-align: -2px; }
+/* the "slash": a line that sweeps across the title when done */
+.title {
+  background: linear-gradient(currentColor, currentColor) no-repeat 0 55% / 0 2px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-size .35s ease;
+}
+.done > .row .title { background-size: 100% 2px; }
+.title.editing {
+  outline: none; background: var(--hover); border-radius: 4px; padding: 0 3px; cursor: text; user-select: text;
+  display: inline-block; min-width: 60px;
+}
+.ph { color: var(--muted); }
+.meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.meta:empty { display: none; }
+.pill {
+  font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 1px 8px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--muted); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.pill .i { width: 12px; height: 12px; }
+button.pill:hover { color: var(--text); }
+.due.warn { color: var(--warn); border-color: currentColor; }
+.due.bad { color: #fff; background: var(--bad); border-color: var(--bad); }
+.due.ok { color: var(--ok); }
+.pill.done-at { color: var(--ok); border-color: currentColor; }
+.pill.done-at.late { color: var(--warn); }
+.prog { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 11.5px; color: var(--muted); font-weight: 500; }
+.bar { flex: 1; height: 6px; border-radius: 99px; background: var(--hover); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--c, var(--accent)); border-radius: 99px; transition: width .35s; }
+.prog.full .bar i { background: var(--ok); }
+.add {
+  position: absolute; right: -13px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%;
+  border: none; background: var(--c); color: #fff; font-size: 16px; line-height: 1; padding: 0;
+  display: none; box-shadow: var(--shadow);
+}
+.node:hover .add, .node.selected .add { display: block; }
+
+/* ---------- Canvas overlay controls ---------- */
+.zoombar {
+  position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; align-items: center;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: var(--shadow);
+}
+.zoombar .btn { padding: 3px 9px; border: none; }
+#zoomLbl { min-width: 44px; text-align: center; color: var(--muted); font-size: 12px; }
+.hint {
+  position: absolute; left: 12px; bottom: 12px; color: var(--muted); font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent); padding: 4px 8px; border-radius: 8px; pointer-events: none;
+}
+
+/* ---------- Agenda ---------- */
+aside h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#agenda { padding: 14px 10px; }
+.ag-head { display: flex; align-items: baseline; justify-content: space-between; margin: 2px 6px 14px; }
+.ag-head h2 { margin: 0; }
+.ag-sum { font-size: 12px; color: var(--muted); }
+.ag-sum b { color: var(--bad); font-weight: 600; }
+.ag-sec { margin-bottom: 8px; }
+.ag-sh {
+  display: flex; align-items: center; gap: 6px; width: 100%; border: none; background: none; padding: 5px 6px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); border-radius: 6px;
+}
+.ag-sh:hover { color: var(--text); }
+.ag-sh .i { width: 14px; height: 14px; transition: transform .15s; }
+.ag-sec.collapsed .ag-sh .i { transform: rotate(-90deg); }
+.ag-sec.collapsed .ag-list { display: none; }
+.ag-cnt {
+  margin-left: auto; min-width: 20px; padding: 1px 6px; border-radius: 99px; text-align: center;
+  font-size: 11px; letter-spacing: 0; background: var(--hover); color: var(--muted);
+}
+.ag-sec.overdue .ag-sh { color: var(--bad); }
+.ag-sec.overdue .ag-cnt { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.ag-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+.ag-row:hover { background: var(--hover); }
+.ag-row.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ag-chk {
+  flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--muted); background: none;
+  padding: 0; display: grid; place-items: center; color: transparent;
+}
+.ag-chk .i { width: 11px; height: 11px; stroke-width: 3; }
+.ag-chk:hover { border-color: var(--ok); color: var(--ok); }
+.ag-row.done .ag-chk { background: var(--ok); border-color: var(--ok); color: #fff; }
+.ag-main { flex: 1; min-width: 0; }
+.ag-t { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-row.done .ag-t { color: var(--muted); text-decoration: line-through; }
+.ag-meta { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); margin-top: 1px; min-width: 0; }
+.ag-meta span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.ag-date { flex: none; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.25; }
+.ag-date small { display: block; font-size: 10.5px; }
+.ag-date.bad { color: var(--bad); }
+.ag-date.warn { color: var(--warn); }
+.empty { color: var(--muted); font-size: 13px; }
+
+/* ---------- Details ---------- */
+#details label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+#details input:not([type=checkbox]), #details select, #details textarea {
+  display: block; width: 100%; margin-top: 4px; padding: 7px 9px; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg);
+}
+#details input[type=color] { padding: 2px; height: 36px; }
+#details textarea { resize: vertical; }
+#details .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#details .chkrow { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
+#details .chkrow input { width: 18px; height: 18px; accent-color: var(--ok); }
+#details .btns { display: flex; gap: 8px; margin-top: 4px; }
+#details .btns .btn { flex: 1; }
+#details .keys { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
+kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font-size: 11px; background: var(--bg); }
+#fProg { margin: -2px 0 12px; }
+#fProg .prog { margin: 0; }
+.warnmsg { color: var(--bad); font-size: 12px; margin: -6px 0 10px; }
+.iconbtn { border: none; background: none; color: var(--muted); padding: 2px; border-radius: 6px; display: grid; place-items: center; }
+.iconbtn:hover { color: var(--text); background: var(--hover); }
+#dType { display: inline-flex; align-items: center; gap: 8px; }
+#dType .i { width: 18px; height: 18px; color: var(--c); }
+
+#toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: 10px; transition: .25s; z-index: 50;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+.pill.remark { color: var(--accent); border-color: currentColor; }
+
+.overlay { position: fixed; inset: 0; z-index: 40; background: rgba(10, 14, 24, .5); display: grid; place-items: center; padding: 16px; }
+.overlay[hidden] { display: none; }
+.dlg {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow);
+  width: min(420px, 100%); padding: 18px 20px;
+}
+.dlg h3 { margin: 0 0 6px; font-size: 16px; }
+.dlg p { margin: 0 0 8px; color: var(--muted); }
+.dlg ul { margin: 0 0 14px; padding-left: 20px; max-height: 140px; overflow-y: auto; }
+.dlg label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.dlg textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); resize: vertical; }
+.dlg .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.dlg .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* ---------- People ---------- */
+.av {
+  display: inline-grid; place-items: center; flex: none; width: 20px; height: 20px; border-radius: 50%;
+  color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0; line-height: 1;
+}
+.av.more { background: var(--muted); }
+.avs { display: inline-flex; align-items: center; }
+.avs .av + .av { margin-left: -6px; box-shadow: 0 0 0 2px var(--card); }
+.pill.person { padding-left: 2px; }
+.pill.person .av { width: 16px; height: 16px; font-size: 7.5px; }
+#details .flabel { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.chips .none { font-size: 12px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 2px; border-radius: 99px;
+  background: var(--hover); color: var(--text); font-size: 12.5px;
+}
+.chip button { border: none; background: none; color: var(--muted); padding: 0 2px; display: grid; place-items: center; }
+.chip button:hover { color: var(--bad); }
+#fAssigned:empty { display: none; }
+#details [hidden] { display: none !important; }
+.chip .av.team .i { width: 11px; height: 11px; }
+.chip .i { width: 13px; height: 13px; }
+#details .btns { flex-wrap: wrap; }
+.ag-filter { display: flex; align-items: center; gap: 8px; margin: -4px 6px 12px; font-size: 12px; color: var(--muted); }
+.ag-filter .i { width: 14px; height: 14px; }
+.ag-filter select {
+  flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text);
+}
+.ag-row .av { width: 22px; height: 22px; }
+#teamFields[hidden], #assignWrap[hidden] { display: none; }
+.av.team .i { width: 11px; height: 11px; }
+.pill.teampill { padding-left: 2px; }
+.pill.teampill .av { width: 16px; height: 16px; }
+.pill.teampill .av .i { width: 9px; height: 9px; }
+.from-team { font-size: 11.5px; color: var(--muted); margin: -2px 0 6px; }
+
+/* ---------- Teams dialog ---------- */
+.dlg.wide { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.dlg-h { display: flex; align-items: center; justify-content: space-between; }
+.new-team { display: flex; gap: 8px; margin: 4px 0 14px; }
+.new-team input, .team-add {
+  flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+}
+.team-card { border: 1px solid var(--border); border-left: 4px solid var(--c); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.team-top { display: flex; align-items: center; gap: 8px; }
+.team-top .av { width: 26px; height: 26px; }
+.team-top .av .i { width: 14px; height: 14px; }
+.team-name { flex: 1; min-width: 0; font-weight: 600; font-size: 14px; border: 1px solid transparent; background: none; border-radius: 6px; padding: 4px 6px; }
+.team-name:hover, .team-name:focus { border-color: var(--border); background: var(--bg); outline: none; }
+.team-uses { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.team-card .chips { margin: 8px 0; }
+.team-add { width: 100%; }
+.team-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
+
+/* shown while a file is dragged over the page */
+body.dropping #viewport { outline: 3px dashed var(--accent); outline-offset: -6px; }
+body.dropping::after {
+  content: attr(data-drop); position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 60; pointer-events: none;
+  padding: 10px 18px; border-radius: 99px; background: var(--accent); color: #fff; font-weight: 600; box-shadow: var(--shadow);
+  max-width: calc(100vw - 32px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.node.drop-target { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+
+/* ---------- Attachments ---------- */
+.files { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; }
+.file { display: flex; align-items: center; gap: 8px; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.file .thumb, .file .ficon { flex: none; width: 38px; height: 38px; border-radius: 6px; cursor: pointer; }
+.file .thumb { object-fit: cover; background: var(--hover); }
+.file .ficon { display: grid; place-items: center; background: var(--hover); color: var(--muted); }
+.file .fname {
+  flex: 1; min-width: 0; border: none; background: none; padding: 0; text-align: left; color: var(--text); font-size: 12.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file .fname:hover { color: var(--accent); text-decoration: underline; }
+.file .fname small { display: block; color: var(--muted); font-size: 11px; text-decoration: none; }
+.file.missing { opacity: .55; }
+.file .iconbtn .i { width: 15px; height: 15px; }
+.attach-btn { width: 100%; }
+.attach-tip { font-size: 11.5px; margin-top: 6px; }
+#viewer { cursor: zoom-out; }
+#viewer figure { margin: 0; text-align: center; }
+#viewer img { max-width: min(92vw, 1400px); max-height: 82vh; border-radius: 10px; box-shadow: var(--shadow); background: #fff; }
+#viewer figcaption { color: #fff; margin-top: 10px; font-size: 13px; }
+
+/* ---------- Sidebar tabs + projects list ---------- */
+.side-tabs { display: flex; gap: 2px; padding: 3px; margin: 0 4px 14px; background: var(--hover); border-radius: 9px; }
+.side-tab {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; background: none;
+  padding: 6px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--muted);
+}
+.side-tab .i { width: 15px; height: 15px; }
+.side-tab:hover { color: var(--text); }
+.side-tab.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .15); }
+.tab-badge { font-size: 10.5px; font-weight: 700; color: #fff; background: var(--bad); border-radius: 99px; padding: 0 6px; }
+.pj-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 8px; border-radius: 9px; cursor: pointer; }
+.pj-row:hover { background: var(--hover); }
+.pj-row.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.pj-ic {
+  flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c);
+}
+.pj-main { flex: 1; min-width: 0; }
+.pj-t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pj-row.done .pj-t { color: var(--muted); text-decoration: line-through; }
+.pj-meta { font-size: 11.5px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pj-meta b { color: var(--bad); font-weight: 600; }
+.pj-prog { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pj-prog .bar { height: 4px; }
+.pj-prog .bar i { background: var(--c); }
+.pj-prog.full .bar i { background: var(--ok); }
+.pj-row .avs { margin-top: 4px; }
+.pj-row .avs .av + .av { box-shadow: 0 0 0 2px var(--panel); }
+
+@media (max-width: 900px) {
+  aside { position: absolute; top: 0; bottom: 0; z-index: 5; box-shadow: var(--shadow); width: min(300px, 85vw); }
+  #agenda { left: 0; } #details { right: 0; }
+  .stats { margin-left: 0; }
+  #search { width: 130px; }
+  .hint { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span data-i="network"></span>Mind Map Scheduler</div>
+  <div class="tb">
+    <button class="btn primary" id="addProject" title="New project"><span data-i="plus"></span>Project</button>
+    <button class="btn" id="addIdea" title="New idea"><span data-i="bulb"></span>Idea</button>
+    <button class="btn" id="arrange" title="Tidy up the layout"><span data-i="workflow"></span>Arrange</button>
+    <button class="btn" id="hideDone" aria-pressed="false" title="Hide completed items"><span data-i="eyeOff"></span>Hide done</button>
+    <button class="btn" id="agendaBtn" aria-pressed="true" title="Show or hide the side panel"><span data-i="panel"></span>Sidebar</button>
+    <button class="btn" id="teamsBtn" title="Create teams and add people to them"><span data-i="users"></span>Teams</button>
+    <div class="search"><span data-i="search"></span><input id="search" type="search" placeholder="Search…" aria-label="Search"></div>
+  </div>
+  <div class="tb">
+    <button class="btn icon" id="undoBtn" title="Undo (Ctrl+Z)" aria-label="Undo"><span data-i="undo"></span></button>
+    <button class="btn icon" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo"><span data-i="redo"></span></button>
+    <button class="btn" id="exportBtn" title="Download a backup"><span data-i="download"></span>Export</button>
+    <button class="btn" id="importBtn" title="Load a backup — or drag a .json file onto the page"><span data-i="upload"></span>Import</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+    <button class="btn primary" id="installBtn" title="Install as an app on this computer" hidden><span data-i="download"></span>Install app</button>
+    <button class="btn icon" id="themeBtn" title="Theme" aria-label="Theme"></button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <aside id="agenda"></aside>
+  <div id="viewport">
+    <div id="world">
+      <svg id="edges"></svg>
+      <div id="nodes"></div>
+    </div>
+    <div class="hint">Drag to pan · Scroll to zoom · Double-click canvas for a new idea · Double-click a card to rename</div>
+    <div class="zoombar">
+      <button class="btn" id="zoomOut" title="Zoom out">−</button>
+      <span id="zoomLbl">100%</span>
+      <button class="btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn" id="fitBtn" title="Fit everything in view">Fit</button>
+    </div>
+  </div>
+  <aside id="details" hidden>
+    <h2><span id="dType">Task</span><button class="iconbtn" id="dClose" title="Close (Esc)" aria-label="Close"><span data-i="x"></span></button></h2>
+    <label>Title<input id="fTitle" autocomplete="off"></label>
+    <label class="chkrow"><input type="checkbox" id="fDone"> Done</label>
+    <label id="doneWrap" hidden>Completed on<input type="date" id="fDoneAt"></label>
+    <div id="fProg"></div>
+    <div class="two">
+      <label>Type
+        <select id="fType"><option value="project">Project</option><option value="idea">Idea</option><option value="task">Task</option></select>
+      </label>
+      <label>Color<input type="color" id="fColor"></label>
+    </div>
+    <div id="teamFields">
+      <label>Team<select id="fTeam"></select></label>
+      <div class="flabel">People responsible
+        <div class="chips" id="fPeople"></div>
+        <div class="from-team" id="fFromTeam" hidden></div>
+        <input id="fPersonAdd" list="peopleList" placeholder="Add someone else — type a name, press Enter" autocomplete="off">
+      </div>
+    </div>
+    <label id="assignWrap">Assigned to
+      <select id="fAssign"></select>
+      <input id="fAssignNew" list="peopleList" placeholder="Type their name, press Enter" autocomplete="off" hidden>
+      <div class="chips" id="fAssigned"></div>
+    </label>
+    <datalist id="peopleList"></datalist>
+    <div class="two">
+      <label>Start<input type="date" id="fStart"></label>
+      <label>Due<input type="date" id="fDue"></label>
+    </div>
+    <div class="warnmsg" id="fWarn" hidden>Due date is before the start date.</div>
+    <label>Notes<textarea id="fNotes" rows="6" placeholder="Details, links, thoughts…"></textarea></label>
+    <label>Remark<textarea id="fRemark" rows="2" placeholder="Needed to mark done while sub-tasks are still open"></textarea></label>
+    <div class="flabel">Attachments
+      <div id="fFiles" class="files"></div>
+      <button class="btn attach-btn" id="fAttachBtn"><span data-i="clip"></span>Attach file</button>
+      <div class="attach-tip">or paste a screenshot with <kbd>Ctrl</kbd>+<kbd>V</kbd>, or drag files onto a card</div>
+      <input type="file" id="fAttachInput" multiple hidden>
+    </div>
+    <div class="btns">
+      <button class="btn" id="dAdd"><span data-i="plus"></span>Sub-task</button>
+      <button class="btn" id="dExport" title="Download only this item and everything under it"><span data-i="download"></span>Export</button>
+      <button class="btn danger" id="dDel"><span data-i="trash"></span>Delete</button>
+    </div>
+    <div class="keys">
+      <kbd>Tab</kbd> add sub-task · <kbd>Enter</kbd> add sibling<br>
+      <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
+      <kbd>Del</kbd> delete · <kbd>Esc</kbd> deselect<br>
+      <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
+    </div>
+  </aside>
+</main>
+<div id="toast" role="status"></div>
+<div id="choice" class="overlay" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cTitle">
+    <h3 id="cTitle"></h3>
+    <p id="cMsg"></p>
+    <div class="btns" id="cBtns"></div>
+  </div>
+</div>
+<div id="teamsDlg" class="overlay" hidden>
+  <div class="dlg wide" role="dialog" aria-modal="true" aria-labelledby="tTitle">
+    <h3 id="tTitle" class="dlg-h"><span>Teams</span><button class="iconbtn" id="tClose" title="Close (Esc)" aria-label="Close"><span data-i="x"></span></button></h3>
+    <p>Put people into teams. Then pick a team on a project, or assign a whole team to a task.</p>
+    <div class="new-team">
+      <input id="newTeamName" placeholder="New team name, e.g. Design" autocomplete="off" maxlength="100">
+      <button class="btn primary" id="newTeamBtn"><span data-i="plus"></span>Create team</button>
+    </div>
+    <div id="teamList"></div>
+  </div>
+</div>
+<datalist id="allPeople"></datalist>
+<div id="viewer" class="overlay" hidden title="Click to close">
+  <figure><img id="viewerImg" alt=""><figcaption id="viewerCap"></figcaption></figure>
+</div>
+<div id="modal" class="overlay" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h3 id="mTitle">Not all sub-tasks are done</h3>
+    <p id="mMsg"></p>
+    <ul id="mList"></ul>
+    <label for="mRemark">Add a remark to mark it done anyway</label>
+    <textarea id="mRemark" rows="3" placeholder="e.g. Remaining items moved to next sprint"></textarea>
+    <div class="btns">
+      <button class="btn" id="mCancel">Cancel</button>
+      <button class="btn primary" id="mOk" disabled>Mark done with remark</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const STORE = 'mindmap-scheduler-v1';
+const THEME_KEY = 'mindmap-scheduler-theme';
+const PALETTE = ['#5b6cff', '#e5484d', '#1f9d55', '#d98a00', '#a855f7', '#0ea5e9', '#ec4899', '#14b8a6'];
+const $ = s => document.querySelector(s);
+const vp = $('#viewport');
+
+// Line icons (paths from the Lucide set, ISC license), drawn inline so the app works offline.
+const ICONS = {
+  network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  task: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>',
+  workflow: '<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>',
+  eyeOff: '<path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><path d="m2 2 20 20"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>',
+  calendar: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
+  notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
+  remark: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>'
+};
+const icon = name => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+const TYPES = { project: ['folder', 'Project'], idea: ['bulb', 'Idea'], task: ['task', 'Task'] };
+document.querySelectorAll('[data-i]').forEach(el => el.outerHTML = icon(el.dataset.i));
+
+let state, sel = null, hideDone = false, query = '', agendaOpen = true;
+let undoStack = [], redoStack = [], sizes = new Map(), byId = new Map(), kids = new Map();
+
+/* ---------- Helpers ---------- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const todayStr = () => fmtDate(new Date());
+const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return fmtDate(d); };
+const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+const parseDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const daysUntil = s => Math.round((parseDate(s) - parseDate(todayStr())) / 864e5);
+const shortDate = s => parseDate(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+function index() {
+  byId = new Map(state.nodes.map(n => [n.id, n]));
+  kids = new Map();
+  for (const n of state.nodes) {
+    if (!kids.has(n.parentId)) kids.set(n.parentId, []);
+    kids.get(n.parentId).push(n);
+  }
+}
+const childrenOf = id => kids.get(id) || [];
+function descendants(id, out = []) {
+  for (const c of childrenOf(id)) { out.push(c); descendants(c.id, out); }
+  return out;
+}
+function ancestors(n) {
+  const a = [];
+  let p = n.parentId && byId.get(n.parentId);
+  while (p) { a.push(p); p = p.parentId && byId.get(p.parentId); }
+  return a;
+}
+const rootOf = n => ancestors(n).pop() || n;
+function colorOf(n) {
+  for (let c = n; c; c = c.parentId && byId.get(c.parentId)) if (c.color) return c.color;
+  return PALETTE[0];
+}
+function isVisible(n) {
+  if (hideDone && n.done) return false;
+  return !ancestors(n).some(a => a.collapsed || (hideDone && a.done));
+}
+// Progress = share of leaf items under a node that are done.
+function prog(n, memo) {
+  if (memo.has(n.id)) return memo.get(n.id);
+  const ch = childrenOf(n.id);
+  let r;
+  if (!ch.length) r = { done: n.done ? 1 : 0, total: 1 };
+  else {
+    r = { done: 0, total: 0 };
+    for (const c of ch) { const p = prog(c, memo); r.done += p.done; r.total += p.total; }
+  }
+  memo.set(n.id, r);
+  return r;
+}
+function dueInfo(n) {
+  if (!n.dueDate) return null;
+  const d = daysUntil(n.dueDate);
+  let cls = '';
+  if (n.done) cls = 'ok'; else if (d < 0) cls = 'bad'; else if (d <= 2) cls = 'warn';
+  let txt;
+  if (d === 0) txt = 'Today';
+  else if (d === 1) txt = 'Tomorrow';
+  else if (d < 0 && !n.done) txt = d === -1 ? '1 day overdue' : `${-d} days overdue`;
+  else if (d > 1 && d < 7) txt = parseDate(n.dueDate).toLocaleDateString(undefined, { weekday: 'short' });
+  else txt = shortDate(n.dueDate);
+  return { cls, txt, d };
+}
+/* ---------- People ---------- */
+const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+function initials(name) {
+  const p = name.trim().split(/\s+/);
+  return ((p[0]?.[0] || '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
+}
+function personColor(name) {
+  let h = 0;
+  for (const c of name.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+const avatar = name => `<span class="av" style="background:${personColor(name)}" title="${esc(name)}">${esc(initials(name))}</span>`;
+// everyone named anywhere on the map or in a team, for suggestions and the agenda filter
+function allPeople() {
+  const out = [];
+  const names = [...state.teams.flatMap(t => t.members), ...state.nodes.flatMap(n => [...n.members, n.assignee])];
+  for (const p of names) if (p && !out.some(o => sameName(o, p))) out.push(p);
+  return out.sort((a, b) => a.localeCompare(b));
+}
+const teamById = id => (id && state.teams.find(t => t.id === id)) || null;
+const onTeam = (team, name) => !!team && !!name && team.members.some(m => sameName(m, name));
+// a project's people = its team's members plus anyone added to the project directly
+function projectPeople(root) {
+  const out = [...(teamById(root.teamId)?.members || [])];
+  for (const m of root.members) if (!out.some(o => sameName(o, m))) out.push(m);
+  return out;
+}
+const teamBadge = t => `<span class="av team" style="background:${t.color}" title="${esc(t.name)}">${icon('users')}</span>`;
+const avatarStack = names => !names.length ? '' :
+  `<span class="avs" title="${esc(names.join(', '))}">${names.slice(0, 4).map(avatar).join('')}` +
+  `${names.length > 4 ? `<span class="av more">+${names.length - 4}</span>` : ''}</span>`;
+const matches = (n, q) => [n.title, n.notes, n.assignee, teamById(n.teamId)?.name, teamById(n.assigneeTeam)?.name, ...n.members]
+  .join(' ').toLowerCase().includes(q);
+const cleanNames = a => Array.isArray(a)
+  ? [...new Map(a.filter(m => typeof m === 'string' && m.trim()).map(m => [m.trim().toLowerCase(), m.trim().replace(/\s+/g, ' ')])).values()]
+  : [];
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+/* ---------- State, persistence, undo ---------- */
+function makeNode(o) {
+  return Object.assign({
+    id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
+    teamId: null, members: [], assignee: '', assigneeTeam: null, attachments: [],
+    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null
+  }, o);
+}
+let saveTimer;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { } }, 250);
+}
+const history = () => JSON.stringify({ nodes: state.nodes, teams: state.teams });
+function snapshot() {
+  undoStack.push(history());
+  if (undoStack.length > 100) undoStack.shift();
+  redoStack = []; // a new change starts a fresh redo history
+}
+// move the current map onto one stack and restore the top of the other
+function stepHistory(from, to, label) {
+  const s = from.pop();
+  if (!s) { toast(`Nothing to ${label.toLowerCase()}`); return; }
+  to.push(history());
+  ({ nodes: state.nodes, teams: state.teams } = JSON.parse(s));
+  if (sel && !state.nodes.some(n => n.id === sel)) sel = null;
+  render();
+  toast(label === 'Undo' ? 'Undone' : 'Redone');
+}
+const undo = () => stepHistory(undoStack, redoStack, 'Undo');
+const redo = () => stepHistory(redoStack, undoStack, 'Redo');
+function sanitize(d) {
+  if (!d || !Array.isArray(d.nodes)) return null;
+  const teams = [], tids = new Set();
+  for (const t of Array.isArray(d.teams) ? d.teams : []) {
+    if (!t || typeof t.id !== 'string' || tids.has(t.id)) continue;
+    tids.add(t.id);
+    teams.push({
+      id: t.id, name: String(t.name ?? '').trim().slice(0, 100) || 'Team', members: cleanNames(t.members),
+      color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : PALETTE[teams.length % PALETTE.length]
+    });
+  }
+  // older saves kept the team as plain text on the project: turn it into a real team
+  const legacyTeam = (name, members) => {
+    if (typeof name !== 'string' || !name.trim()) return null;
+    let t = teams.find(x => sameName(x.name, name));
+    if (!t) {
+      t = { id: uid(), name: name.trim(), members: cleanNames(members), color: PALETTE[teams.length % PALETTE.length] };
+      teams.push(t);
+      tids.add(t.id);
+    }
+    return t.id;
+  };
+  const ids = new Set(), nodes = [];
+  for (const r of d.nodes) {
+    if (!r || typeof r.id !== 'string' || ids.has(r.id)) continue;
+    ids.add(r.id);
+    nodes.push(makeNode({
+      id: r.id,
+      parentId: typeof r.parentId === 'string' ? r.parentId : null,
+      type: ['project', 'idea', 'task'].includes(r.type) ? r.type : 'task',
+      title: String(r.title ?? 'Untitled').slice(0, 500),
+      notes: String(r.notes ?? ''),
+      remark: String(r.remark ?? ''),
+      teamId: tids.has(r.teamId) ? r.teamId : legacyTeam(r.team, r.members),
+      members: cleanNames(r.members),
+      assignee: String(r.assignee ?? '').trim(),
+      assigneeTeam: tids.has(r.assigneeTeam) ? r.assigneeTeam : null,
+      attachments: (Array.isArray(r.attachments) ? r.attachments : []).filter(a => a && typeof a.id === 'string').map(a => ({
+        id: a.id, name: String(a.name ?? 'file').slice(0, 255), type: String(a.type ?? ''), size: +a.size || 0, addedAt: +a.addedAt || Date.now()
+      })),
+      x: +r.x || 0, y: +r.y || 0,
+      color: /^#[0-9a-f]{6}$/i.test(r.color) ? r.color : null,
+      done: !!r.done, collapsed: !!r.collapsed,
+      startDate: isDate(r.startDate) ? r.startDate : null,
+      dueDate: isDate(r.dueDate) ? r.dueDate : null,
+      createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null
+    }));
+  }
+  const m = new Map(nodes.map(n => [n.id, n]));
+  for (const n of nodes) {
+    if (n.parentId && !m.has(n.parentId)) n.parentId = null;
+    // break any parent cycles
+    const seen = new Set([n.id]);
+    for (let p = n.parentId; p; p = m.get(p)?.parentId) {
+      if (seen.has(p)) { n.parentId = null; break; }
+      seen.add(p);
+    }
+  }
+  nodes.filter(n => !n.parentId && !n.color).forEach((n, i) => n.color = PALETTE[i % PALETTE.length]);
+  const v = d.view || {};
+  return { version: 1, nodes, teams, view: { panX: +v.panX || 0, panY: +v.panY || 0, zoom: Math.min(2.5, Math.max(.2, +v.zoom || 1)) } };
+}
+function seed() {
+  const p = makeNode({ type: 'project', title: 'Launch personal website', color: PALETTE[0] });
+  const write = makeNode({ parentId: p.id, title: 'Write content' });
+  const idea = makeNode({ type: 'idea', title: 'Learn guitar', color: PALETTE[4], notes: 'Maybe 20 minutes a day?', y: 400 });
+  const nodes = [
+    p,
+    makeNode({ parentId: p.id, title: 'Pick a domain name', done: true, doneAt: Date.now(), dueDate: addDays(-3) }),
+    makeNode({ parentId: p.id, title: 'Design homepage', startDate: addDays(-5), dueDate: addDays(-1) }),
+    write,
+    makeNode({ parentId: write.id, title: 'About me page', dueDate: addDays(1) }),
+    makeNode({ parentId: write.id, title: 'Portfolio entries', dueDate: addDays(5) }),
+    makeNode({ parentId: p.id, title: 'Go live', dueDate: addDays(14) }),
+    idea,
+    makeNode({ parentId: idea.id, type: 'idea', title: 'Find a teacher or app', y: 400 }),
+    makeNode({ parentId: idea.id, type: 'idea', title: 'Buy a used acoustic', y: 401 })
+  ];
+  nodes.forEach((n, i) => { if (!n.y) n.y = i; });
+  return { version: 1, nodes, teams: [], view: { panX: 40, panY: 30, zoom: 1 }, _arrange: true };
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE);
+    if (raw) { const s = sanitize(JSON.parse(raw)); if (s) return s; }
+  } catch (e) { }
+  return seed();
+}
+
+/* ---------- Rendering ---------- */
+function cardFor(n, memo, q) {
+  const el = document.createElement('div');
+  const ch = childrenOf(n.id);
+  el.className = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '');
+  if (q) el.classList.add(matches(n, q) ? 'match' : 'dim');
+  el.dataset.id = n.id;
+  el.style.left = n.x + 'px';
+  el.style.top = n.y + 'px';
+  el.style.setProperty('--c', colorOf(n));
+  const typeIcon = n.type === 'task' ? '' : `<span class="ic">${icon(TYPES[n.type][0])}</span>`;
+  let html = `<div class="row"><button class="chk" title="Mark done (Space)" aria-label="Toggle done">${n.done ? icon('check') : ''}</button>` +
+    `<div class="tw">${typeIcon}<span class="title">${n.title ? esc(n.title) : '<i class="ph">Untitled</i>'}</span></div></div>`;
+  const meta = [];
+  if (n.done && n.doneAt) {
+    const when = new Date(n.doneAt), day = fmtDate(when);
+    const late = n.dueDate && day > n.dueDate ? daysUntil(day) - daysUntil(n.dueDate) : 0;
+    const full = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    meta.push(`<span class="pill done-at${late ? ' late' : ''}" title="Completed ${full}${late ? ` — ${late} day${late > 1 ? 's' : ''} after the due date` : ''}">${icon('check')}Done ${shortDate(day)}</span>`);
+  }
+  const di = n.done && n.doneAt ? null : dueInfo(n);
+  if (di) meta.push(`<span class="pill due ${di.cls}" title="${n.startDate ? 'Start ' + shortDate(n.startDate) + ' · ' : ''}Due ${shortDate(n.dueDate)}">${icon('calendar')}${di.txt}</span>`);
+  else if (n.startDate) meta.push(`<span class="pill" title="Start date">${icon('clock')}${shortDate(n.startDate)}</span>`);
+  if (n.notes) meta.push(`<span class="pill" title="Has notes">${icon('notes')}</span>`);
+  if (n.attachments.length) meta.push(`<span class="pill" title="${esc(n.attachments.map(a => a.name).join(', '))}">${icon('clip')}${n.attachments.length}</span>`);
+  if (n.remark) meta.push(`<span class="pill remark" title="Remark: ${esc(n.remark)}">${icon('remark')}Remark</span>`);
+  if (!n.parentId) {
+    const team = teamById(n.teamId);
+    if (team) meta.push(`<span class="pill teampill" title="Team">${teamBadge(team)}${esc(team.name)}</span>`);
+    meta.push(avatarStack(projectPeople(n)));
+  } else {
+    const team = teamById(n.assigneeTeam);
+    if (team) meta.push(`<span class="pill teampill" title="Assigned to ${esc(team.name)}: ${esc(team.members.join(', ') || 'no people yet')}">${teamBadge(team)}${esc(team.name)}</span>`);
+    else if (n.assignee) meta.push(`<span class="pill person" title="Assigned to ${esc(n.assignee)}">${avatar(n.assignee)}${esc(n.assignee.split(/\s+/)[0])}</span>`);
+  }
+  if (ch.length) meta.push(`<button class="pill tog" title="${n.collapsed ? 'Expand' : 'Collapse'}">${n.collapsed ? icon('chevronRight') + descendants(n.id).length + ' hidden' : icon('chevronDown') + 'Fold'}</button>`);
+  html += `<div class="meta">${meta.join('')}</div>`;
+  if (ch.length) {
+    const p = prog(n, memo), pct = Math.round(p.done / p.total * 100);
+    html += `<div class="prog${pct === 100 ? ' full' : ''}"><div class="bar"><i style="width:${pct}%"></i></div><span>${p.done}/${p.total} · ${pct}%</span></div>`;
+  }
+  html += '<button class="add" title="Add sub-task (Tab)">+</button>';
+  el.innerHTML = html;
+  return el;
+}
+function render() {
+  index();
+  const memo = new Map(), layer = $('#nodes'), q = query.trim().toLowerCase();
+  layer.innerHTML = '';
+  for (const n of state.nodes) if (isVisible(n)) layer.appendChild(cardFor(n, memo, q));
+  sizes = new Map();
+  for (const el of layer.children) sizes.set(el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight });
+  drawEdges();
+  renderStats(memo);
+  renderAgenda();
+  renderPanel();
+  renderTeams();
+  applyView();
+  save();
+}
+function drawEdges() {
+  let s = '';
+  for (const n of state.nodes) {
+    if (!n.parentId || !sizes.has(n.id) || !sizes.has(n.parentId)) continue;
+    const p = byId.get(n.parentId), ps = sizes.get(p.id), cs = sizes.get(n.id);
+    let x1 = p.x + ps.w, y1 = p.y + ps.h / 2, x2 = n.x, y2 = n.y + cs.h / 2;
+    if (n.x + cs.w / 2 < p.x + ps.w / 2) { x1 = p.x; x2 = n.x + cs.w; } // child sits to the left
+    const dx = Math.max(30, Math.abs(x2 - x1) / 2) * (x2 >= x1 ? 1 : -1);
+    s += `<path d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}" stroke="${colorOf(n)}"${n.done ? ' class="done"' : ''}/>`;
+  }
+  $('#edges').innerHTML = s;
+}
+function renderStats(memo) {
+  let total = 0, done = 0, overdue = 0;
+  for (const n of state.nodes) {
+    if (!childrenOf(n.id).length) { total++; if (n.done) done++; }
+    if (!n.done && n.dueDate && daysUntil(n.dueDate) < 0) overdue++;
+  }
+  const pct = total ? Math.round(done / total * 100) : 0;
+  $('#stats').innerHTML = `<span><b>${done}</b>/${total} done</span>` +
+    (overdue ? `<span class="od"><b>${overdue}</b> overdue</span>` : '') +
+    `<div class="bar" title="${pct}% complete"><i style="width:${pct}%;background:var(--ok)"></i></div><b>${pct}%</b>`;
+}
+const SIDE_KEY = 'mindmap-scheduler-sidetab';
+let sideTab = 'projects';
+try { sideTab = localStorage.getItem(SIDE_KEY) || 'projects'; } catch (e) { }
+function sideTabs() {
+  const overdue = state.nodes.filter(n => !n.done && n.dueDate && daysUntil(n.dueDate) < 0).length;
+  const tab = (k, ic, label, extra = '') =>
+    `<button class="side-tab${sideTab === k ? ' on' : ''}" data-tab="${k}" role="tab" aria-selected="${sideTab === k}">${icon(ic)}${label}${extra}</button>`;
+  return `<div class="side-tabs" role="tablist">${tab('projects', 'folder', 'Projects')}` +
+    `${tab('agenda', 'calendar', 'Agenda', overdue ? `<span class="tab-badge">${overdue}</span>` : '')}</div>`;
+}
+function projectsHtml() {
+  const memo = new Map(), selRoot = sel && byId.get(sel) ? rootOf(byId.get(sel)).id : null;
+  const row = n => {
+    const p = prog(n, memo), pct = Math.round(p.done / p.total * 100), desc = descendants(n.id);
+    const open = desc.filter(d => !d.done && !childrenOf(d.id).length).length;
+    const overdue = [n, ...desc].filter(d => !d.done && d.dueDate && daysUntil(d.dueDate) < 0).length;
+    const meta = [esc(teamById(n.teamId)?.name || ''), desc.length ? `${open} open` : 'No tasks yet', overdue && `<b>${overdue} overdue</b>`]
+      .filter(Boolean).join(' · ');
+    const people = avatarStack(projectPeople(n));
+    return `<div class="pj-row${n.id === selRoot ? ' sel' : ''}${n.done ? ' done' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}">` +
+      `<span class="pj-ic">${icon(TYPES[n.type][0])}</span>` +
+      `<div class="pj-main"><div class="pj-t" title="${esc(n.title)}">${esc(n.title || 'Untitled')}</div><div class="pj-meta">${meta}</div>` +
+      `<div class="pj-prog${pct === 100 ? ' full' : ''}"><div class="bar"><i style="width:${pct}%"></i></div><span>${pct}%</span></div>` +
+      (people ? `<div>${people}</div>` : '') +
+      `</div></div>`;
+  };
+  const roots = state.nodes.filter(n => !n.parentId).sort((a, b) => a.done - b.done);
+  const sec = (key, label, list) => !list.length ? '' :
+    `<section class="ag-sec${agCollapsed.has(key) ? ' collapsed' : ''}" data-key="${key}">` +
+    `<button class="ag-sh">${icon('chevronDown')}<span>${label}</span><span class="ag-cnt">${list.length}</span></button>` +
+    `<div class="ag-list">${list.map(row).join('')}</div></section>`;
+  return (sec('pj-project', 'Projects', roots.filter(n => n.type !== 'idea')) + sec('pj-idea', 'Ideas', roots.filter(n => n.type === 'idea')))
+    || '<p class="empty">No projects yet. Click <b>Project</b> in the top bar to start one.</p>';
+}
+const agCollapsed = new Set(['done']);
+let agPerson = ''; // '' = everyone, '-' = unassigned, 'team:<id>' or 'person:<name>'
+// does this item belong to the agenda filter? Team tasks count for each member, and vice versa.
+function forFilter(n) {
+  if (!agPerson) return true;
+  if (agPerson === '-') return !!n.parentId && !n.assignee && !n.assigneeTeam;
+  if (agPerson.startsWith('team:')) {
+    const t = teamById(agPerson.slice(5));
+    return n.assigneeTeam === t?.id || onTeam(t, n.assignee);
+  }
+  const name = agPerson.slice(7);
+  return (!!n.assignee && sameName(n.assignee, name)) || onTeam(teamById(n.assigneeTeam), name);
+}
+function agDate(n) {
+  if (n.done) return n.doneAt ? `<div class="ag-date">${shortDate(fmtDate(new Date(n.doneAt)))}</div>` : '';
+  if (!n.dueDate) return '';
+  const d = daysUntil(n.dueDate);
+  const label = d === 0 ? 'Today' : d === 1 ? 'Tomorrow'
+    : d > 1 && d < 7 ? parseDate(n.dueDate).toLocaleDateString(undefined, { weekday: 'short' }) : shortDate(n.dueDate);
+  return `<div class="ag-date ${d < 0 ? 'bad' : d <= 2 ? 'warn' : ''}">${label}${d < 0 ? `<small>${-d}d late</small>` : ''}</div>`;
+}
+function renderAgenda() {
+  const box = $('#agenda');
+  box.hidden = !agendaOpen;
+  if (!agendaOpen) return;
+  if (sideTab === 'projects') { box.innerHTML = sideTabs() + projectsHtml(); return; }
+  const g = { overdue: [], today: [], week: [], later: [], nodate: [], done: [] };
+  const people = allPeople();
+  // drop a filter whose team/person no longer exists
+  if (agPerson.startsWith('team:') && !teamById(agPerson.slice(5))) agPerson = '';
+  if (agPerson.startsWith('person:') && !people.some(p => sameName(p, agPerson.slice(7)))) agPerson = '';
+  const wanted = forFilter;
+  for (const n of state.nodes) {
+    if (!wanted(n)) continue;
+    if (n.done) g.done.push(n);
+    else if (n.dueDate) {
+      const d = daysUntil(n.dueDate);
+      g[d < 0 ? 'overdue' : d === 0 ? 'today' : d <= 7 ? 'week' : 'later'].push(n);
+    } else if (n.parentId && !childrenOf(n.id).length) g.nodate.push(n);
+  }
+  for (const k of ['overdue', 'today', 'week', 'later']) g[k].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  g.done = g.done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 10);
+  const row = n => {
+    const root = rootOf(n);
+    const where = (root !== n ? root.title : TYPES[n.type][1]) + (n.startDate && !n.done ? ' · starts ' + shortDate(n.startDate) : '');
+    return `<div class="ag-row${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}">` +
+      `<button class="ag-chk" title="${n.done ? 'Mark not done' : 'Mark done'}" aria-label="Toggle done">${icon('check')}</button>` +
+      `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">${esc(n.title || 'Untitled')}</div>` +
+      `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div></div>` +
+      `${teamById(n.assigneeTeam) ? teamBadge(teamById(n.assigneeTeam)) : n.assignee ? avatar(n.assignee) : ''}${agDate(n)}</div>`;
+  };
+  const sec = (key, label) => !g[key].length ? '' :
+    `<section class="ag-sec ${key}${agCollapsed.has(key) ? ' collapsed' : ''}" data-key="${key}">` +
+    `<button class="ag-sh">${icon('chevronDown')}<span>${label}</span><span class="ag-cnt">${g[key].length}</span></button>` +
+    `<div class="ag-list">${g[key].map(row).join('')}</div></section>`;
+  const open = state.nodes.filter(n => !n.done && !childrenOf(n.id).length && wanted(n)).length;
+  const body = sec('overdue', 'Overdue') + sec('today', 'Today') + sec('week', 'Next 7 days') + sec('later', 'Later') +
+    sec('nodate', 'Unscheduled') + sec('done', 'Recently completed');
+  box.innerHTML = sideTabs() + `<div class="ag-head"><span class="ag-sum">${open} open` +
+    `${g.overdue.length ? ` · <b>${g.overdue.length} overdue</b>` : ''}</span></div>` +
+    (people.length || state.teams.length ? `<label class="ag-filter">${icon('users')}<span>Show tasks for</span><select id="agPerson">` +
+      `<option value="">Everyone</option>` +
+      (state.teams.length ? `<optgroup label="Teams">${state.teams.map(t => `<option value="team:${t.id}"${agPerson === 'team:' + t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup>` : '') +
+      (people.length ? `<optgroup label="People">${people.map(p => `<option value="person:${esc(p)}"${agPerson.startsWith('person:') && sameName(p, agPerson.slice(7)) ? ' selected' : ''}>${esc(p)}</option>`).join('')}</optgroup>` : '') +
+      `<option value="-"${agPerson === '-' ? ' selected' : ''}>Unassigned</option></select></label>` : '') +
+    (body || `<p class="empty">${agPerson ? 'Nothing here for this selection.' : 'Nothing scheduled yet. Select a task and set a due date.'}</p>`);
+}
+function setVal(el, v) { if (document.activeElement !== el && el.value !== v) el.value = v; }
+function renderPanel() {
+  const n = sel && byId.get(sel);
+  $('#details').hidden = !n;
+  if (!n) return;
+  $('#dType').innerHTML = icon(TYPES[n.type][0]) + TYPES[n.type][1];
+  $('#dType').style.setProperty('--c', colorOf(n));
+  setVal($('#fTitle'), n.title);
+  setVal($('#fNotes'), n.notes);
+  setVal($('#fRemark'), n.remark);
+  renderFiles(n);
+  // roots pick a team (+ extra people); everything below is assigned to a team or one person
+  $('#teamFields').hidden = !!n.parentId;
+  $('#assignWrap').hidden = !n.parentId;
+  const opt = (v, label, on) => `<option value="${esc(v)}"${on ? ' selected' : ''}>${esc(label)}</option>`;
+  const teamOpts = state.teams.map(t => opt('team:' + t.id, `${t.name} (${t.members.length})`, false));
+  if (!n.parentId) {
+    const team = teamById(n.teamId);
+    $('#fTeam').innerHTML = opt('', 'No team', !team) +
+      state.teams.map(t => opt(t.id, `${t.name} (${t.members.length} ${t.members.length === 1 ? 'person' : 'people'})`, t === team)).join('') +
+      opt('new', '+ Create a new team…', false);
+    // team members come along automatically and can't be removed here; extra people can
+    const fromTeam = (team?.members || []).map(m => `<span class="chip" title="From team ${esc(team.name)}">${avatar(m)}${esc(m)}</span>`);
+    const extra = n.members.map((m, i) => onTeam(team, m) ? '' :
+      `<span class="chip">${avatar(m)}${esc(m)}<button data-idx="${i}" aria-label="Remove ${esc(m)}">${icon('x')}</button></span>`);
+    $('#fPeople').innerHTML = [...fromTeam, ...extra].join('') || '<span class="none">No one yet — pick a team or add people</span>';
+    $('#fFromTeam').hidden = !team?.members.length;
+    $('#fFromTeam').textContent = team ? `Everyone in ${team.name} is included. Manage the team with the Teams button.` : '';
+  } else {
+    const root = rootOf(n), mine = projectPeople(root), others = allPeople().filter(p => !mine.some(m => sameName(m, p)));
+    const cur = n.assigneeTeam ? 'team:' + n.assigneeTeam : n.assignee ? 'person:' + n.assignee : '';
+    const group = (label, list) => list.length ? `<optgroup label="${esc(label)}">${list.join('')}</optgroup>` : '';
+    $('#fAssign').innerHTML = opt('', 'Not assigned', false) +
+      group('Teams', teamOpts) +
+      group(`People on ${root.title}`, mine.map(p => opt('person:' + p, p, false))) +
+      group('Other people', others.map(p => opt('person:' + p, p, false))) +
+      opt('new', '+ Someone new…', false) + opt('newteam', '+ Create a new team…', false);
+    $('#fAssign').value = cur;
+    if ($('#fAssign').value !== cur) $('#fAssign').value = ''; // stale reference
+    // the current assignment as a removable tag
+    const t = teamById(n.assigneeTeam), x = `<button class="unassign" title="Remove" aria-label="Remove">${icon('x')}</button>`;
+    $('#fAssigned').innerHTML = t ? `<span class="chip">${teamBadge(t)}${esc(t.name)}${x}</span>`
+      : n.assignee ? `<span class="chip">${avatar(n.assignee)}${esc(n.assignee)}${x}</span>` : '';
+  }
+  const mine = projectPeople(rootOf(n));
+  const people = [...mine, ...allPeople().filter(p => !mine.some(m => sameName(m, p)))];
+  $('#peopleList').innerHTML = people.map(p => `<option value="${esc(p)}">`).join('');
+  setVal($('#fType'), n.type);
+  setVal($('#fColor'), colorOf(n));
+  setVal($('#fStart'), n.startDate || '');
+  setVal($('#fDue'), n.dueDate || '');
+  $('#fDone').checked = n.done;
+  $('#doneWrap').hidden = !n.done;
+  setVal($('#fDoneAt'), n.doneAt ? fmtDate(new Date(n.doneAt)) : '');
+  $('#fWarn').hidden = !(n.startDate && n.dueDate && n.dueDate < n.startDate);
+  const ch = childrenOf(n.id);
+  if (ch.length) {
+    const p = prog(n, new Map()), pct = Math.round(p.done / p.total * 100);
+    $('#fProg').innerHTML = `<div class="prog${pct === 100 ? ' full' : ''}" style="--c:${colorOf(n)}"><div class="bar"><i style="width:${pct}%"></i></div><span>${p.done}/${p.total} done · ${pct}%</span></div>`;
+  } else $('#fProg').innerHTML = '';
+}
+
+/* ---------- View (pan / zoom) ---------- */
+function applyView() {
+  const v = state.view;
+  $('#world').style.transform = `translate(${v.panX}px, ${v.panY}px) scale(${v.zoom})`;
+  vp.style.backgroundSize = `${24 * v.zoom}px ${24 * v.zoom}px`;
+  vp.style.backgroundPosition = `${v.panX}px ${v.panY}px`;
+  $('#zoomLbl').textContent = Math.round(v.zoom * 100) + '%';
+}
+function toWorld(cx, cy) {
+  const r = vp.getBoundingClientRect(), v = state.view;
+  return { x: (cx - r.left - v.panX) / v.zoom, y: (cy - r.top - v.panY) / v.zoom };
+}
+function zoomAt(z, mx, my) {
+  const v = state.view;
+  z = Math.min(2.5, Math.max(0.2, z));
+  const k = z / v.zoom;
+  v.panX = mx - (mx - v.panX) * k;
+  v.panY = my - (my - v.panY) * k;
+  v.zoom = z;
+  applyView();
+  save();
+}
+function fitView() {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [id, s] of sizes) {
+    const n = byId.get(id);
+    x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+    x1 = Math.max(x1, n.x + s.w); y1 = Math.max(y1, n.y + s.h);
+  }
+  const r = vp.getBoundingClientRect(), pad = 60, v = state.view;
+  if (x0 === Infinity || r.width < pad * 3 || r.height < pad * 3) return;
+  v.zoom = Math.min(1.2, Math.max(0.2, Math.min((r.width - pad * 2) / (x1 - x0), (r.height - pad * 2) / (y1 - y0))));
+  v.panX = (r.width - (x1 - x0) * v.zoom) / 2 - x0 * v.zoom;
+  v.panY = (r.height - (y1 - y0) * v.zoom) / 2 - y0 * v.zoom;
+  applyView();
+  save();
+}
+function focusNode(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  ancestors(n).forEach(a => a.collapsed = false);
+  if (hideDone && (n.done || ancestors(n).some(a => a.done))) setHideDone(false);
+  sel = id;
+  render();
+  const s = sizes.get(id) || { w: 0, h: 0 }, r = vp.getBoundingClientRect(), v = state.view;
+  v.panX = r.width / 2 - (n.x + s.w / 2) * v.zoom;
+  v.panY = r.height / 2 - (n.y + s.h / 2) * v.zoom;
+  applyView();
+  cardEl(id)?.classList.add('flash');
+}
+const cardEl = id => document.querySelector(`.node[data-id="${id}"]`);
+
+/* ---------- Actions ---------- */
+// selection only touches classes + panel, so the card DOM survives for double-click
+function select(id) {
+  sel = id;
+  document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
+  if (id) cardEl(id)?.classList.add('selected');
+  renderPanel();
+  renderAgenda();
+}
+function addRoot(type, at) {
+  snapshot();
+  const c = at || toWorld(vp.getBoundingClientRect().left + vp.clientWidth / 2, vp.getBoundingClientRect().top + vp.clientHeight / 2);
+  const roots = state.nodes.filter(n => !n.parentId);
+  const n = makeNode({
+    type, title: type === 'project' ? 'New project' : 'New idea',
+    x: Math.round(c.x - 95), y: Math.round(c.y - 22), color: PALETTE[roots.length % PALETTE.length]
+  });
+  // nudge down until it doesn't sit on top of another card
+  const hits = () => [...sizes].some(([id, s]) => {
+    const o = byId.get(id);
+    return n.x < o.x + s.w && n.x + 200 > o.x && n.y < o.y + s.h && n.y + 50 > o.y;
+  });
+  for (let i = 0; i < 60 && hits(); i++) n.y += 30;
+  state.nodes.push(n);
+  sel = n.id;
+  render();
+  startRename(n.id);
+}
+function addChild(pid) {
+  const p = byId.get(pid);
+  if (!p) return;
+  snapshot();
+  p.collapsed = false;
+  if (hideDone && p.done) setHideDone(false);
+  const ps = sizes.get(pid) || { w: 190, h: 44 }, sibs = childrenOf(pid);
+  let x, y;
+  if (sibs.length) {
+    const last = sibs.reduce((a, b) => (b.y > a.y ? b : a));
+    x = last.x;
+    y = last.y + (sizes.get(last.id)?.h || 44) + 16;
+  } else { x = p.x + ps.w + 70; y = p.y; }
+  const type = p.type === 'idea' ? 'idea' : 'task';
+  const n = makeNode({ parentId: pid, type, title: type === 'idea' ? 'New idea' : 'New task', x, y });
+  state.nodes.push(n);
+  sel = n.id;
+  render();
+  startRename(n.id);
+}
+function addSibling(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  if (n.parentId) addChild(n.parentId);
+  else addRoot(n.type, { x: n.x + 95, y: n.y + (sizes.get(id)?.h || 50) + 70 });
+}
+// An item with unfinished sub-items can only be closed if it carries a remark.
+function toggleDone(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  if (!n.done) {
+    const open = descendants(id).filter(d => !d.done);
+    if (open.length && !n.remark.trim()) { askRemark(n, open); return; }
+  }
+  snapshot();
+  setDone(n, !n.done);
+}
+function setDone(n, v) {
+  n.done = v;
+  n.doneAt = v ? Date.now() : null;
+  render();
+  if (n.done) {
+    cardEl(n.id)?.classList.add('just-done');
+    const root = rootOf(n), p = prog(root, new Map());
+    if (p.total > 1 && p.done === p.total) toast(`Completed: ${root.title}`);
+  }
+}
+// small reusable choice dialog; resolves with the picked option's value, or null
+let choiceCancel = null;
+function choose(title, msg, options) {
+  return new Promise(resolve => {
+    $('#cTitle').textContent = title;
+    $('#cMsg').textContent = msg;
+    $('#cBtns').innerHTML = options.map((o, i) => `<button class="btn${o.primary ? ' primary' : ''}" data-v="${i}">${esc(o.label)}</button>`).join('');
+    $('#choice').hidden = false;
+    const done = v => { $('#choice').hidden = true; choiceCancel = null; resolve(v); };
+    $('#cBtns').onclick = e => { const b = e.target.closest('button'); if (b) done(options[+b.dataset.v].value); };
+    choiceCancel = () => done(null);
+    $('#cBtns .primary')?.focus();
+  });
+}
+$('#choice').addEventListener('pointerdown', e => { if (e.target.id === 'choice') choiceCancel?.(); });
+
+/* ---------- Attachments ---------- */
+// The map only keeps each file's name/size; the file itself lives in IndexedDB, which has far more room than localStorage.
+const MAX_FILE = 25 * 1024 * 1024;
+let dbPromise;
+function filesDb() {
+  return dbPromise ||= new Promise((resolve, reject) => {
+    const r = indexedDB.open('mindmap-scheduler-files', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('files');
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idb(mode, fn) {
+  const d = await filesDb();
+  return new Promise((resolve, reject) => {
+    const tx = d.transaction('files', mode), req = fn(tx.objectStore('files'));
+    tx.oncomplete = () => resolve(req?.result);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+const putFile = (id, blob) => idb('readwrite', s => s.put(blob, id));
+const getFile = id => idb('readonly', s => s.get(id));
+const fileUrls = new Map();
+async function fileUrl(id) {
+  if (!fileUrls.has(id)) {
+    const b = await getFile(id).catch(() => null);
+    if (!b) return null;
+    fileUrls.set(id, URL.createObjectURL(b));
+  }
+  return fileUrls.get(id);
+}
+const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toFixed(1) + ' MB';
+async function attachFiles(id, files) {
+  const n = byId.get(id);
+  if (!n || !files.length) return;
+  const added = [];
+  for (const f of files) {
+    if (f.size > MAX_FILE) { toast(`"${f.name}" is over 25 MB and wasn't attached`); continue; }
+    const a = { id: uid(), name: f.name || 'file', type: f.type || '', size: f.size, addedAt: Date.now() };
+    try { await putFile(a.id, f); } catch (e) { toast("This browser couldn't store the file"); return; }
+    added.push(a);
+  }
+  if (!added.length) return;
+  snapshot();
+  n.attachments.push(...added);
+  render();
+  toast(added.length === 1 ? `Attached "${added[0].name}" to "${n.title}"` : `Attached ${added.length} files to "${n.title}"`);
+}
+async function openAttachment(a) {
+  const url = await fileUrl(a.id);
+  if (!url) { toast("This file isn't stored in this browser"); return; }
+  if (a.type.startsWith('image/')) {
+    $('#viewerImg').src = url;
+    $('#viewerCap').textContent = a.name;
+    $('#viewer').hidden = false;
+  } else window.open(url, '_blank');
+}
+async function downloadAttachment(a) {
+  const url = await fileUrl(a.id);
+  if (!url) { toast("This file isn't stored in this browser"); return; }
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = a.name;
+  link.click();
+}
+// list in the details panel; only rebuilt when the attachments change, so thumbnails don't flicker
+function renderFiles(n) {
+  const box = $('#fFiles'), key = n.id + ':' + n.attachments.map(a => a.id).join(',');
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = n.attachments.map((a, i) =>
+    `<div class="file" data-idx="${i}">` +
+    (a.type.startsWith('image/') ? `<img class="thumb" alt="" data-fid="${a.id}">` : `<span class="ficon">${icon('file')}</span>`) +
+    `<button class="fname" title="Open ${esc(a.name)}">${esc(a.name)}<small>${fmtSize(a.size)}</small></button>` +
+    `<button class="iconbtn fdl" title="Download" aria-label="Download">${icon('download')}</button>` +
+    `<button class="iconbtn frm" title="Remove" aria-label="Remove">${icon('x')}</button></div>`).join('');
+  for (const img of box.querySelectorAll('img[data-fid]'))
+    fileUrl(img.dataset.fid).then(u => { if (u) img.src = u; else img.closest('.file').classList.add('missing'); });
+}
+// delete stored files that no item uses any more (removed or deleted in an earlier visit)
+async function cleanFiles() {
+  try {
+    const used = new Set(state.nodes.flatMap(n => n.attachments.map(a => a.id)));
+    const unused = (await idb('readonly', s => s.getAllKeys())).filter(k => !used.has(k));
+    if (unused.length) await idb('readwrite', s => { unused.forEach(k => s.delete(k)); });
+  } catch (e) { }
+}
+const blobToDataUrl = b => new Promise(resolve => { const r = new FileReader(); r.onload = () => resolve(r.result); r.readAsDataURL(b); });
+// exports carry the files inside the .json so attachments travel with the backup
+async function packFiles(nodes) {
+  const files = {};
+  for (const a of nodes.flatMap(n => n.attachments)) {
+    const b = await getFile(a.id).catch(() => null);
+    if (b) files[a.id] = await blobToDataUrl(b);
+  }
+  return files;
+}
+async function unpackFiles(files) {
+  if (!files || typeof files !== 'object') return;
+  for (const [id, url] of Object.entries(files)) {
+    if (typeof url !== 'string' || !url.startsWith('data:')) continue;
+    try { await putFile(id, await (await fetch(url)).blob()); } catch (e) { }
+  }
+}
+
+/* ---------- Teams ---------- */
+let teamFor = null; // a project/task waiting for a team created in the dialog
+function openTeams(forId = null) {
+  teamFor = forId;
+  $('#teamsDlg').hidden = false;
+  renderTeams();
+  $('#newTeamName').focus();
+}
+function closeTeams() {
+  $('#teamsDlg').hidden = true;
+  teamFor = null;
+  renderPanel();
+}
+function renderTeams() {
+  if ($('#teamsDlg').hidden) return;
+  $('#allPeople').innerHTML = allPeople().map(p => `<option value="${esc(p)}">`).join('');
+  $('#teamList').innerHTML = state.teams.map(t => {
+    const uses = state.nodes.filter(n => n.teamId === t.id).length, tasks = state.nodes.filter(n => n.assigneeTeam === t.id).length;
+    const usage = [uses && `${uses} project${uses > 1 ? 's' : ''}`, tasks && `${tasks} task${tasks > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || 'Not used yet';
+    return `<div class="team-card" data-id="${t.id}" style="--c:${t.color}">` +
+      `<div class="team-top">${teamBadge(t)}<input class="team-name" value="${esc(t.name)}" aria-label="Team name" maxlength="100">` +
+      `<span class="team-uses">${usage}</span><button class="iconbtn team-del" title="Delete team" aria-label="Delete team">${icon('trash')}</button></div>` +
+      `<div class="chips">${t.members.map((m, i) => `<span class="chip">${avatar(m)}${esc(m)}<button data-idx="${i}" aria-label="Remove ${esc(m)}">${icon('x')}</button></span>`).join('') || '<span class="none">No people yet</span>'}</div>` +
+      `<input class="team-add" list="allPeople" placeholder="Add a person — type a name, press Enter" autocomplete="off"></div>`;
+  }).join('') || '<div class="team-empty">No teams yet. Type a name above and click Create team.</div>';
+}
+function createTeam() {
+  const name = $('#newTeamName').value.trim().replace(/\s+/g, ' ');
+  if (!name) { $('#newTeamName').focus(); return; }
+  if (state.teams.some(t => sameName(t.name, name))) { toast(`There's already a team called "${name}"`); return; }
+  snapshot();
+  const t = { id: uid(), name, members: [], color: PALETTE[state.teams.length % PALETTE.length] };
+  state.teams.push(t);
+  // created from a project or task picker: use it there straight away
+  const n = teamFor && byId.get(teamFor);
+  if (n) { if (n.parentId) { n.assigneeTeam = t.id; n.assignee = ''; } else n.teamId = t.id; }
+  teamFor = null;
+  $('#newTeamName').value = '';
+  render();
+  $(`.team-card[data-id="${t.id}"] .team-add`)?.focus();
+  toast(n ? `Created "${name}" and set it on "${n.title}"` : `Created team "${name}"`);
+}
+$('#teamsBtn').onclick = () => openTeams();
+$('#tClose').onclick = closeTeams;
+$('#newTeamBtn').onclick = createTeam;
+$('#newTeamName').addEventListener('keydown', e => { if (e.key === 'Enter') createTeam(); });
+$('#teamsDlg').addEventListener('pointerdown', e => { if (e.target.id === 'teamsDlg') closeTeams(); });
+$('#teamList').addEventListener('change', e => {
+  const card = e.target.closest('.team-card'), t = card && teamById(card.dataset.id);
+  if (!t) return;
+  if (e.target.classList.contains('team-name')) {
+    const name = e.target.value.trim().replace(/\s+/g, ' ');
+    if (!name || name === t.name) { e.target.value = t.name; return; }
+    snapshot();
+    t.name = name;
+    render();
+  } else if (e.target.classList.contains('team-add')) {
+    const name = e.target.value.trim().replace(/\s+/g, ' ');
+    e.target.value = '';
+    if (!name || onTeam(t, name)) return;
+    snapshot();
+    t.members.push(name);
+    render();
+    $(`.team-card[data-id="${t.id}"] .team-add`)?.focus();
+  }
+});
+$('#teamList').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.classList.contains('team-name')) e.target.blur(); });
+$('#teamList').addEventListener('click', e => {
+  const card = e.target.closest('.team-card'), t = card && teamById(card.dataset.id);
+  if (!t) return;
+  const rm = e.target.closest('.chip button[data-idx]');
+  if (rm) { snapshot(); t.members.splice(+rm.dataset.idx, 1); render(); return; }
+  if (e.target.closest('.team-del')) {
+    const used = state.nodes.filter(n => n.teamId === t.id || n.assigneeTeam === t.id);
+    if (used.length && !confirm(`Delete "${t.name}"? It is used on ${used.length} item${used.length > 1 ? 's' : ''}; they will be left without this team.`)) return;
+    snapshot();
+    for (const n of used) { if (n.teamId === t.id) n.teamId = null; if (n.assigneeTeam === t.id) n.assigneeTeam = null; }
+    state.teams = state.teams.filter(x => x !== t);
+    render();
+    toast(`Deleted team "${t.name}" — Ctrl+Z to undo`);
+  }
+});
+
+let remarkFor = null;
+function askRemark(n, open) {
+  remarkFor = n.id;
+  $('#mMsg').textContent = `"${n.title}" still has ${open.length} unfinished sub-task${open.length > 1 ? 's' : ''}:`;
+  const shown = open.slice(0, 6).map(d => `<li>${esc(d.title || 'Untitled')}</li>`).join('');
+  $('#mList').innerHTML = shown + (open.length > 6 ? `<li>…and ${open.length - 6} more</li>` : '');
+  $('#mRemark').value = '';
+  $('#mOk').disabled = true;
+  $('#modal').hidden = false;
+  $('#mRemark').focus();
+}
+function closeRemark(commit) {
+  const n = byId.get(remarkFor), text = $('#mRemark').value.trim();
+  $('#modal').hidden = true;
+  remarkFor = null;
+  if (commit && n && text) {
+    snapshot();
+    n.remark = text;
+    setDone(n, true);
+  } else renderPanel(); // puts the panel's Done checkbox back
+}
+$('#mRemark').addEventListener('input', e => $('#mOk').disabled = !e.target.value.trim());
+$('#mRemark').addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeRemark(false);
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) closeRemark(true);
+});
+$('#mOk').onclick = () => closeRemark(true);
+$('#mCancel').onclick = () => closeRemark(false);
+$('#modal').addEventListener('pointerdown', e => { if (e.target.id === 'modal') closeRemark(false); });
+
+function deleteNode(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  const d = descendants(id);
+  if (d.length && !confirm(`Delete "${n.title}" and its ${d.length} sub-item${d.length > 1 ? 's' : ''}?`)) return;
+  snapshot();
+  const gone = new Set([id, ...d.map(x => x.id)]);
+  state.nodes = state.nodes.filter(x => !gone.has(x.id));
+  sel = n.parentId || null;
+  render();
+  toast('Deleted — Ctrl+Z to undo');
+}
+function startRename(id) {
+  const card = cardEl(id), n = byId.get(id);
+  if (!card || !n) return;
+  const t = card.querySelector('.title'), old = n.title;
+  let finished = false;
+  t.textContent = n.title;
+  t.contentEditable = 'true';
+  t.classList.add('editing');
+  t.focus();
+  const range = document.createRange();
+  range.selectNodeContents(t);
+  const s = getSelection(); s.removeAllRanges(); s.addRange(range);
+  const finish = commit => {
+    if (finished) return;
+    finished = true;
+    const v = t.textContent.replace(/\s+/g, ' ').trim();
+    if (commit && v && v !== old) { snapshot(); n.title = v; }
+    render();
+  };
+  t.addEventListener('keydown', e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    else if (e.key === 'Tab') { e.preventDefault(); finish(true); addChild(id); }
+  });
+  t.addEventListener('blur', () => finish(true));
+  t.addEventListener('pointerdown', e => e.stopPropagation());
+}
+function autoArrange(silent) {
+  if (!silent) snapshot();
+  index();
+  const GX = 70, GY = 16, ROOTGAP = 60;
+  const old = new Map(state.nodes.map(n => [n.id, { x: n.x, y: n.y }]));
+  const visKids = id => childrenOf(id).filter(k => sizes.has(k.id)).sort((a, b) => a.y - b.y);
+  const hm = new Map();
+  const h = n => {
+    if (hm.has(n.id)) return hm.get(n.id);
+    const ks = visKids(n.id);
+    const kh = ks.reduce((t, k, i) => t + h(k) + (i ? GY : 0), 0);
+    const r = Math.max(sizes.get(n.id).h, kh);
+    hm.set(n.id, r);
+    return r;
+  };
+  const place = (n, x, top) => {
+    const s = sizes.get(n.id), H = h(n), ks = visKids(n.id);
+    n.x = x;
+    n.y = top + (H - s.h) / 2;
+    let y = top + (H - ks.reduce((t, k, i) => t + h(k) + (i ? GY : 0), 0)) / 2;
+    for (const k of ks) { place(k, x + s.w + GX, y); y += h(k) + GY; }
+  };
+  const roots = state.nodes.filter(n => !n.parentId && sizes.has(n.id)).sort((a, b) => a.y - b.y);
+  if (!roots.length) return;
+  const x0 = Math.min(...roots.map(r => r.x));
+  let top = Math.min(...roots.map(r => r.y));
+  for (const r of roots) { place(r, x0, top); top += h(r) + ROOTGAP; }
+  // hidden (collapsed / filtered) nodes travel with their nearest visible ancestor
+  for (const n of state.nodes) {
+    if (sizes.has(n.id)) continue;
+    const a = ancestors(n).find(x => sizes.has(x.id));
+    if (!a) continue;
+    const o = old.get(a.id);
+    n.x += a.x - o.x;
+    n.y += a.y - o.y;
+  }
+  render();
+}
+function setHideDone(v) {
+  hideDone = v;
+  $('#hideDone').setAttribute('aria-pressed', v);
+}
+
+/* ---------- Canvas interaction ---------- */
+let drag = null;
+vp.addEventListener('pointerdown', e => {
+  if (e.button !== 0 && e.button !== 1) return;
+  if (e.target.closest('button, .zoombar') || e.target.isContentEditable) return;
+  const card = e.target.closest('.node');
+  drag = { sx: e.clientX, sy: e.clientY, moved: false };
+  if (card) {
+    drag.mode = 'node';
+    drag.id = card.dataset.id;
+  } else {
+    drag.mode = 'pan';
+    drag.pan = { x: state.view.panX, y: state.view.panY };
+  }
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved) {
+    if (Math.hypot(dx, dy) < 4) return;
+    drag.moved = true;
+    getSelection().removeAllRanges();
+    if (drag.mode === 'node') {
+      snapshot();
+      const n = byId.get(drag.id);
+      drag.group = [n, ...descendants(n.id)].map(m => ({ n: m, x: m.x, y: m.y, el: cardEl(m.id) }));
+    } else vp.classList.add('panning');
+  }
+  if (drag.mode === 'node') {
+    const z = state.view.zoom;
+    for (const g of drag.group) {
+      g.n.x = Math.round(g.x + dx / z);
+      g.n.y = Math.round(g.y + dy / z);
+      if (g.el) { g.el.style.left = g.n.x + 'px'; g.el.style.top = g.n.y + 'px'; }
+    }
+    drawEdges();
+  } else {
+    state.view.panX = drag.pan.x + dx;
+    state.view.panY = drag.pan.y + dy;
+    applyView();
+  }
+});
+window.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  vp.classList.remove('panning');
+  if (!d.moved) select(d.mode === 'node' ? d.id : null);
+  else save();
+});
+vp.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = vp.getBoundingClientRect();
+  zoomAt(state.view.zoom * Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+vp.addEventListener('dblclick', e => {
+  if (e.target.closest('.zoombar')) return;
+  const card = e.target.closest('.node');
+  if (card) { if (!e.target.closest('button')) startRename(card.dataset.id); }
+  else addRoot('idea', toWorld(e.clientX, e.clientY));
+});
+$('#nodes').addEventListener('click', e => {
+  const card = e.target.closest('.node');
+  if (!card) return;
+  const id = card.dataset.id;
+  if (e.target.closest('.chk')) toggleDone(id);
+  else if (e.target.closest('.add')) addChild(id);
+  else if (e.target.closest('.tog')) { snapshot(); const n = byId.get(id); n.collapsed = !n.collapsed; render(); }
+});
+$('#agenda').addEventListener('click', e => {
+  const tab = e.target.closest('.side-tab');
+  if (tab) {
+    sideTab = tab.dataset.tab;
+    try { localStorage.setItem(SIDE_KEY, sideTab); } catch (err) { }
+    renderAgenda();
+    return;
+  }
+  const pj = e.target.closest('.pj-row');
+  if (pj) { focusNode(pj.dataset.id); return; }
+  const sh = e.target.closest('.ag-sh');
+  if (sh) {
+    const k = sh.parentElement.dataset.key;
+    if (!agCollapsed.delete(k)) agCollapsed.add(k);
+    renderAgenda();
+    return;
+  }
+  const it = e.target.closest('.ag-row');
+  if (!it) return;
+  if (e.target.closest('.ag-chk')) toggleDone(it.dataset.id);
+  else focusNode(it.dataset.id);
+});
+$('#agenda').addEventListener('change', e => {
+  if (e.target.id !== 'agPerson') return;
+  agPerson = e.target.value;
+  renderAgenda();
+});
+// keep buttons from holding focus, so Space/Enter go to the map shortcuts
+document.addEventListener('click', e => { if (e.target.closest('button')) e.target.closest('button').blur(); });
+
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if (!$('#viewer').hidden) { if (e.key === 'Escape') $('#viewer').hidden = true; return; }
+  if (!$('#modal').hidden) { if (e.key === 'Escape') closeRemark(false); return; }
+  if (!$('#choice').hidden) { if (e.key === 'Escape') choiceCancel?.(); return; }
+  if (!$('#teamsDlg').hidden) {
+    if (e.key === 'Escape') closeTeams();
+    else if ((e.ctrlKey || e.metaKey) && !['INPUT', 'TEXTAREA'].includes(t.tagName)) {
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    }
+    return;
+  }
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName) || t.isContentEditable) return;
+  if (e.ctrlKey || e.metaKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); return; }
+  }
+  if (!sel || !byId.get(sel)) return;
+  const keys = {
+    Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
+    Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
+  };
+  if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
+});
+
+/* ---------- Toolbar ---------- */
+$('#addProject').onclick = () => addRoot('project');
+$('#addIdea').onclick = () => addRoot('idea');
+$('#arrange').onclick = () => { autoArrange(); fitView(); };
+$('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); };
+$('#agendaBtn').onclick = () => { agendaOpen = !agendaOpen; $('#agendaBtn').setAttribute('aria-pressed', agendaOpen); renderAgenda(); };
+$('#undoBtn').onclick = undo;
+$('#redoBtn').onclick = redo;
+$('#search').addEventListener('input', e => { query = e.target.value; render(); });
+$('#search').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const q = query.trim().toLowerCase();
+  const hit = q && state.nodes.find(n => matches(n, q));
+  if (hit) focusNode(hit.id); else if (q) toast('No matches');
+});
+const zoomCenter = f => zoomAt(state.view.zoom * f, vp.clientWidth / 2, vp.clientHeight / 2);
+$('#zoomIn').onclick = () => zoomCenter(1.2);
+$('#zoomOut').onclick = () => zoomCenter(1 / 1.2);
+$('#fitBtn').onclick = fitView;
+
+function download(data, name) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'item';
+$('#exportBtn').onclick = async () => {
+  download({ ...state, files: await packFiles(state.nodes) }, `mindmap-${todayStr()}.json`);
+  toast('Full backup downloaded');
+};
+// one project / idea / branch, saved with the same format as a full backup
+async function exportBranch(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  const nodes = [n, ...descendants(id)].map(x => ({ ...x }));
+  nodes[0].parentId = null;
+  nodes[0].color = colorOf(n);
+  const teams = state.teams.filter(t => nodes.some(x => x.teamId === t.id || x.assigneeTeam === t.id));
+  download({ version: 1, nodes, teams, view: state.view, files: await packFiles(nodes) }, `mindmap-${slug(n.title)}-${todayStr()}.json`);
+  toast(`Exported "${n.title}"`);
+}
+// put imported items below the existing map with fresh ids, so nothing collides
+function addNodes(list, teams = []) {
+  const ids = new Map(list.map(n => [n.id, uid()]));
+  // teams with a matching name are merged; new ones are added
+  const teamIds = new Map();
+  for (const t of teams) {
+    const same = state.teams.find(x => sameName(x.name, t.name));
+    if (same) {
+      for (const m of t.members) if (!onTeam(same, m)) same.members.push(m);
+      teamIds.set(t.id, same.id);
+    } else {
+      const copy = { ...t, id: uid(), members: [...t.members] };
+      state.teams.push(copy);
+      teamIds.set(t.id, copy.id);
+    }
+  }
+  let bottom = -Infinity, left = Infinity;
+  for (const n of state.nodes) {
+    bottom = Math.max(bottom, n.y + (sizes.get(n.id)?.h || 60));
+    left = Math.min(left, n.x);
+  }
+  const dx = left === Infinity ? 0 : left - Math.min(...list.map(n => n.x));
+  const dy = bottom === -Infinity ? 0 : bottom + 80 - Math.min(...list.map(n => n.y));
+  const added = list.map(n => ({
+    ...n, id: ids.get(n.id), parentId: n.parentId ? ids.get(n.parentId) : null, x: n.x + dx, y: n.y + dy,
+    teamId: teamIds.get(n.teamId) || null, assigneeTeam: teamIds.get(n.assigneeTeam) || null
+  }));
+  state.nodes.push(...added);
+  return added.find(n => !n.parentId)?.id;
+}
+$('#importBtn').onclick = () => $('#importFile').click();
+$('#importFile').onchange = e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) importFile(f);
+};
+// Files dragged in from File Explorer: onto a card (or the open panel) they attach to that item;
+// a single .json dropped anywhere else imports like the Import button.
+const dragHasFile = e => [...(e.dataTransfer?.types || [])].includes('Files');
+const dropTarget = e => {
+  const card = e.target.closest?.('.node');
+  return card ? card.dataset.id : e.target.closest?.('#details') ? sel : null;
+};
+let dragDepth = 0, dropCard = null;
+function setDropCard(id) {
+  if (dropCard === id) return;
+  cardEl(dropCard)?.classList.remove('drop-target');
+  dropCard = id;
+  cardEl(id)?.classList.add('drop-target');
+}
+function endDrag() {
+  dragDepth = 0;
+  setDropCard(null);
+  document.body.classList.remove('dropping');
+}
+document.addEventListener('dragenter', e => { if (dragHasFile(e)) { dragDepth++; document.body.classList.add('dropping'); } });
+document.addEventListener('dragleave', e => { if (dragHasFile(e) && --dragDepth <= 0) endDrag(); });
+document.addEventListener('dragover', e => {
+  if (!dragHasFile(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+  const id = dropTarget(e), n = id && byId.get(id);
+  setDropCard(e.target.closest?.('.node') ? id : null);
+  document.body.dataset.drop = n ? `Drop to attach to "${n.title}"` : 'Drop a .json to import · drop on a card to attach';
+});
+document.addEventListener('drop', e => {
+  if (!dragHasFile(e)) return;
+  e.preventDefault();
+  const id = dropTarget(e), files = [...e.dataTransfer.files];
+  endDrag();
+  if (!files.length) return;
+  if (id) attachFiles(id, files);
+  else if (files.length === 1 && /\.json$/i.test(files[0].name)) importFile(files[0]);
+  else toast('Drop files on a card to attach them to that task');
+});
+async function importFile(f) {
+  let d, raw;
+  try { raw = JSON.parse(await f.text()); d = sanitize(raw); } catch (err) { d = null; }
+  if (!d || !d.nodes.length) { alert('That file is not a valid mind map export.'); return; }
+  const roots = d.nodes.filter(n => !n.parentId);
+  const what = roots.length === 1
+    ? `"${roots[0].title}" (${d.nodes.length} item${d.nodes.length > 1 ? 's' : ''})`
+    : `${roots.length} projects/ideas (${d.nodes.length} items)`;
+  let mode = 'replace';
+  if (state.nodes.length) {
+    mode = await choose(`Import ${f.name}`, `This file contains ${what}. Add it to your current map, or replace everything with it?`, [
+      { label: 'Cancel', value: null },
+      { label: 'Replace my map', value: 'replace' },
+      { label: 'Add to my map', value: 'add', primary: true }
+    ]);
+    if (!mode) return;
+  }
+  await unpackFiles(raw.files);
+  snapshot();
+  if (mode === 'replace') {
+    state = d;
+    sel = null;
+    render();
+    fitView();
+    toast('Map replaced — Ctrl+Z to undo');
+  } else {
+    // measure the new cards, tidy the whole map so they sit in place, then bring the new item into view
+    const first = addNodes(d.nodes, d.teams);
+    render();
+    autoArrange(true);
+    focusNode(first);
+    toast(`Added ${what}`);
+  }
+};
+
+const THEMES = ['auto', 'light', 'dark'];
+function applyTheme(t) {
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  $('#themeBtn').innerHTML = icon({ auto: 'monitor', light: 'sun', dark: 'moon' }[t]);
+  $('#themeBtn').title = 'Theme: ' + t;
+}
+let theme = 'auto';
+try { theme = localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { }
+applyTheme(theme);
+$('#themeBtn').onclick = () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % 3];
+  applyTheme(theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { }
+};
+
+/* ---------- Details panel ---------- */
+let editSnap = false;
+const editField = (el, apply) => {
+  el.addEventListener('focus', () => editSnap = false);
+  el.addEventListener('input', () => {
+    const n = byId.get(sel);
+    if (!n) return;
+    if (!editSnap) { snapshot(); editSnap = true; }
+    apply(n, el.value);
+    render();
+  });
+};
+editField($('#fTitle'), (n, v) => n.title = v);
+editField($('#fNotes'), (n, v) => n.notes = v);
+editField($('#fRemark'), (n, v) => n.remark = v);
+$('#fTeam').addEventListener('change', e => {
+  const n = byId.get(sel);
+  if (!n) return;
+  if (e.target.value === 'new') { openTeams(n.id); return; }
+  snapshot();
+  n.teamId = e.target.value || null;
+  render();
+});
+$('#fPersonAdd').addEventListener('change', e => {
+  const n = byId.get(sel), name = e.target.value.trim().replace(/\s+/g, ' ');
+  e.target.value = '';
+  if (!n || !name || projectPeople(n).some(m => sameName(m, name))) return;
+  snapshot();
+  n.members.push(name);
+  render();
+  $('#fPersonAdd').focus();
+});
+$('#fPeople').addEventListener('click', e => {
+  const b = e.target.closest('button[data-idx]'), n = byId.get(sel);
+  if (!b || !n) return;
+  snapshot();
+  n.members.splice(+b.dataset.idx, 1);
+  render();
+});
+// a task goes to a whole team or to one person; a person new to the project joins its people
+function assignPerson(n, name) {
+  snapshot();
+  n.assignee = name;
+  n.assigneeTeam = null;
+  const root = rootOf(n);
+  if (name && !projectPeople(root).some(m => sameName(m, name))) root.members.push(name);
+  render();
+}
+$('#fAssign').addEventListener('change', e => {
+  const n = byId.get(sel), v = e.target.value;
+  if (!n) return;
+  if (v === 'newteam') { openTeams(n.id); return; }
+  if (v === 'new') { $('#fAssignNew').hidden = false; $('#fAssignNew').focus(); return; }
+  if (v.startsWith('team:')) { snapshot(); n.assigneeTeam = v.slice(5); n.assignee = ''; render(); }
+  else assignPerson(n, v.startsWith('person:') ? v.slice(7) : '');
+});
+$('#fAssigned').addEventListener('click', e => {
+  const n = byId.get(sel);
+  if (n && e.target.closest('.unassign')) assignPerson(n, '');
+});
+$('#fAssignNew').addEventListener('change', e => {
+  const n = byId.get(sel), name = e.target.value.trim().replace(/\s+/g, ' ');
+  e.target.value = '';
+  e.target.hidden = true;
+  if (n && name) assignPerson(n, name); else renderPanel();
+});
+$('#fAssignNew').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.target.blur();
+  if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
+});
+editField($('#fColor'), (n, v) => n.color = v);
+const changeField = (el, apply) => el.addEventListener('change', () => {
+  const n = byId.get(sel);
+  if (!n) return;
+  snapshot();
+  apply(n, el.value);
+  render();
+});
+changeField($('#fType'), (n, v) => n.type = v);
+changeField($('#fStart'), (n, v) => n.startDate = v || null);
+changeField($('#fDue'), (n, v) => n.dueDate = v || null);
+$('#fDone').addEventListener('change', () => sel && toggleDone(sel));
+// correct the completion date (e.g. ticked off a few days late); keeps the original time of day
+$('#fDoneAt').addEventListener('change', e => {
+  const n = byId.get(sel);
+  if (!n || !n.done || !isDate(e.target.value)) { renderPanel(); return; }
+  const d = parseDate(e.target.value), old = new Date(n.doneAt || Date.now());
+  d.setHours(old.getHours(), old.getMinutes());
+  snapshot();
+  n.doneAt = d.getTime();
+  render();
+});
+$('#fTitle').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+$('#dAdd').onclick = () => sel && addChild(sel);
+$('#dExport').onclick = () => sel && exportBranch(sel);
+$('#dDel').onclick = () => sel && deleteNode(sel);
+$('#dClose').onclick = () => select(null);
+$('#fAttachBtn').onclick = () => $('#fAttachInput').click();
+$('#fAttachInput').onchange = e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (sel) attachFiles(sel, files);
+};
+$('#fFiles').addEventListener('click', e => {
+  const row = e.target.closest('.file'), n = byId.get(sel);
+  const a = row && n?.attachments[+row.dataset.idx];
+  if (!a) return;
+  if (e.target.closest('.frm')) {
+    snapshot();
+    n.attachments.splice(+row.dataset.idx, 1);
+    render();
+    toast(`Removed "${a.name}" — Ctrl+Z to undo`);
+  } else if (e.target.closest('.fdl')) downloadAttachment(a);
+  else if (e.target.closest('.fname, .thumb, .ficon')) openAttachment(a);
+});
+// Ctrl+V with a screenshot (or copied files) attaches it to the selected item
+document.addEventListener('paste', e => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (!files.length) return; // ordinary text pastes behave as usual
+  if (!$('#modal').hidden || !$('#choice').hidden || !$('#teamsDlg').hidden) return;
+  e.preventDefault();
+  const n = sel && byId.get(sel);
+  if (!n) { toast('Select a task first, then paste to attach'); return; }
+  const now = new Date(), stamp = `${todayStr()} ${String(now.getHours()).padStart(2, '0')}.${String(now.getMinutes()).padStart(2, '0')}.${String(now.getSeconds()).padStart(2, '0')}`;
+  // screenshots arrive as "image.png"; give them a useful name
+  attachFiles(n.id, files.map((f, i) => f.name && f.name !== 'image.png' ? f
+    : new File([f], `Screenshot ${stamp}${files.length > 1 ? ' ' + (i + 1) : ''}.${(f.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: f.type })));
+});
+$('#viewer').addEventListener('click', () => { $('#viewer').hidden = true; });
+
+/* ---------- Boot ---------- */
+state = load();
+const firstRun = state._arrange;
+delete state._arrange;
+render();
+if (firstRun) { autoArrange(true); requestAnimationFrame(fitView); }
+else cleanFiles(); // only when a saved map loaded, so a fallback example map never clears your files
+
+/* ---------- Installable app (only when served from a website, not when opened as a file) ---------- */
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  navigator.serviceWorker.register('sw.js').catch(() => { });
+}
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  if (matchMedia('(display-mode: standalone)').matches) return;
+  installPrompt = e;
+  $('#installBtn').hidden = false;
+});
+$('#installBtn').onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  $('#installBtn').hidden = true;
+};
+window.addEventListener('appinstalled', () => {
+  $('#installBtn').hidden = true;
+  toast('Installed — find Mind Map Scheduler in your Start menu');
+});
+</script>
+</body>
+</html>
