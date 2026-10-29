@@ -448,7 +448,10 @@ body.dropping::after {
       <label>Color<input type="color" id="fColor"></label>
     </div>
     <div id="teamFields">
-      <label>Team<select id="fTeam"></select></label>
+      <div class="flabel">Teams
+        <div class="chips" id="fTeams"></div>
+        <select id="fTeam" aria-label="Add a team"></select>
+      </div>
       <div class="flabel">People responsible
         <div class="chips" id="fPeople"></div>
         <div class="from-team" id="fFromTeam" hidden></div>
@@ -657,10 +660,13 @@ function allPeople() {
   return out.sort((a, b) => a.localeCompare(b));
 }
 const teamById = id => (id && state.teams.find(t => t.id === id)) || null;
+// a project/idea can have several teams
+const teamsOf = n => n.teamIds.map(teamById).filter(Boolean);
 const onTeam = (team, name) => !!team && !!name && team.members.some(m => sameName(m, name));
 // a project's people = its team's members plus anyone added to the project directly
 function projectPeople(root) {
-  const out = [...(teamById(root.teamId)?.members || [])];
+  const out = [];
+  for (const m of teamsOf(root).flatMap(t => t.members)) if (!out.some(o => sameName(o, m))) out.push(m);
   for (const m of root.members) if (!out.some(o => sameName(o, m))) out.push(m);
   return out;
 }
@@ -670,7 +676,7 @@ const avatarStack = names => !names.length ? '' :
   `${names.length > 4 ? `<span class="av more">+${names.length - 4}</span>` : ''}</span>`;
 // notes as safe HTML with web links made clickable
 const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
-const matches = (n, q) => [n.title, n.notes, n.assignee, teamById(n.teamId)?.name, teamById(n.assigneeTeam)?.name, ...n.members]
+const matches = (n, q) => [n.title, n.notes, n.assignee, ...teamsOf(n).map(t => t.name), teamById(n.assigneeTeam)?.name, ...n.members]
   .join(' ').toLowerCase().includes(q);
 const cleanNames = a => Array.isArray(a)
   ? [...new Map(a.filter(m => typeof m === 'string' && m.trim()).map(m => [m.trim().toLowerCase(), m.trim().replace(/\s+/g, ' ')])).values()]
@@ -688,7 +694,7 @@ function toast(msg) {
 function makeNode(o) {
   return Object.assign({
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
-    teamId: null, members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
+    teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
     done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null
   }, o);
 }
@@ -748,7 +754,9 @@ function sanitize(d) {
       title: String(r.title ?? 'Untitled').slice(0, 500),
       notes: String(r.notes ?? ''),
       remark: String(r.remark ?? ''),
-      teamId: tids.has(r.teamId) ? r.teamId : legacyTeam(r.team, r.members),
+      // teamIds (list); older saves had a single teamId, or the team as plain text
+      teamIds: [...new Set([...(Array.isArray(r.teamIds) ? r.teamIds : []), r.teamId, legacyTeam(r.team, r.members)]
+        .filter(id => tids.has(id)))],
       members: cleanNames(r.members),
       assignee: String(r.assignee ?? '').trim(),
       assigneeTeam: tids.has(r.assigneeTeam) ? r.assigneeTeam : null,
@@ -835,8 +843,9 @@ function cardFor(n, memo, q) {
       `${n.attachments.length ? icon('clip') + n.attachments.length : ''}${icon('chevronDown')}</button>`);
   if (n.remark) meta.push(`<span class="pill remark" title="Remark: ${esc(n.remark)}">${icon('remark')}Remark</span>`);
   if (!n.parentId) {
-    const team = teamById(n.teamId);
-    if (team) meta.push(`<span class="pill teampill" title="Team">${teamBadge(team)}${esc(team.name)}</span>`);
+    const teams = teamsOf(n);
+    for (const t of teams.slice(0, 3)) meta.push(`<span class="pill teampill" title="Team">${teamBadge(t)}${esc(t.name)}</span>`);
+    if (teams.length > 3) meta.push(`<span class="pill" title="${esc(teams.slice(3).map(t => t.name).join(', '))}">+${teams.length - 3} teams</span>`);
     meta.push(avatarStack(projectPeople(n)));
   } else {
     const team = teamById(n.assigneeTeam);
@@ -919,7 +928,7 @@ function projectsHtml() {
     const p = prog(n, memo), pct = Math.round(p.done / p.total * 100), desc = descendants(n.id);
     const open = desc.filter(d => !d.done && !childrenOf(d.id).length).length;
     const overdue = [n, ...desc].filter(d => !d.done && d.dueDate && daysUntil(d.dueDate) < 0).length;
-    const meta = [esc(teamById(n.teamId)?.name || ''), desc.length ? `${open} open` : 'No tasks yet', overdue && `<b>${overdue} overdue</b>`]
+    const meta = [esc(teamsOf(n).map(t => t.name).join(', ')), desc.length ? `${open} open` : 'No tasks yet', overdue && `<b>${overdue} overdue</b>`]
       .filter(Boolean).join(' · ');
     const people = avatarStack(projectPeople(n));
     return `<div class="pj-row${n.id === selRoot ? ' sel' : ''}${n.done ? ' done' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}">` +
@@ -1019,25 +1028,37 @@ function renderPanel() {
   $('#teamFields').hidden = !!n.parentId;
   $('#assignWrap').hidden = !n.parentId;
   const opt = (v, label, on) => `<option value="${esc(v)}"${on ? ' selected' : ''}>${esc(label)}</option>`;
-  const teamOpts = state.teams.map(t => opt('team:' + t.id, `${t.name} (${t.members.length})`, false));
+  const count = t => `${t.members.length} ${t.members.length === 1 ? 'person' : 'people'}`;
   if (!n.parentId) {
-    const team = teamById(n.teamId);
-    $('#fTeam').innerHTML = opt('', 'No team', !team) +
-      state.teams.map(t => opt(t.id, `${t.name} (${t.members.length} ${t.members.length === 1 ? 'person' : 'people'})`, t === team)).join('') +
+    const teams = teamsOf(n), free = state.teams.filter(t => !teams.includes(t));
+    $('#fTeams').innerHTML = teams.map(t =>
+      `<span class="chip" title="${esc(t.members.join(', ') || 'No people yet')}">${teamBadge(t)}${esc(t.name)}` +
+      `<button data-team="${t.id}" aria-label="Remove team ${esc(t.name)}">${icon('x')}</button></span>`).join('') ||
+      '<span class="none">No team yet</span>';
+    $('#fTeam').innerHTML = opt('', teams.length ? '+ Add another team…' : '+ Add a team…', true) +
+      free.map(t => opt(t.id, `${t.name} (${count(t)})`, false)).join('') +
       opt('new', '+ Create a new team…', false);
     // team members come along automatically and can't be removed here; extra people can
-    const fromTeam = (team?.members || []).map(m => `<span class="chip" title="From team ${esc(team.name)}">${avatar(m)}${esc(m)}</span>`);
-    const extra = n.members.map((m, i) => onTeam(team, m) ? '' :
+    const fromTeams = projectPeople({ ...n, members: [] });
+    const fromChips = fromTeams.map(m => {
+      const where = teams.filter(t => onTeam(t, m)).map(t => t.name).join(', ');
+      return `<span class="chip" title="From ${esc(where)}">${avatar(m)}${esc(m)}</span>`;
+    });
+    const extra = n.members.map((m, i) => fromTeams.some(f => sameName(f, m)) ? '' :
       `<span class="chip">${avatar(m)}${esc(m)}<button data-idx="${i}" aria-label="Remove ${esc(m)}">${icon('x')}</button></span>`);
-    $('#fPeople').innerHTML = [...fromTeam, ...extra].join('') || '<span class="none">No one yet — pick a team or add people</span>';
-    $('#fFromTeam').hidden = !team?.members.length;
-    $('#fFromTeam').textContent = team ? `Everyone in ${team.name} is included. Manage the team with the Teams button.` : '';
+    $('#fPeople').innerHTML = [...fromChips, ...extra].join('') || '<span class="none">No one yet — add a team or people</span>';
+    $('#fFromTeam').hidden = !fromTeams.length;
+    $('#fFromTeam').textContent = fromTeams.length
+      ? `Everyone in ${teams.map(t => t.name).join(' and ')} is included. Manage teams with the Teams button.` : '';
   } else {
+    const mineTeams = teamsOf(rootOf(n)), otherTeams = state.teams.filter(t => !mineTeams.includes(t));
+    const teamOpt = t => opt('team:' + t.id, `${t.name} (${count(t)})`, false);
     const root = rootOf(n), mine = projectPeople(root), others = allPeople().filter(p => !mine.some(m => sameName(m, p)));
     const cur = n.assigneeTeam ? 'team:' + n.assigneeTeam : n.assignee ? 'person:' + n.assignee : '';
     const group = (label, list) => list.length ? `<optgroup label="${esc(label)}">${list.join('')}</optgroup>` : '';
     $('#fAssign').innerHTML = opt('', 'Not assigned', false) +
-      group('Teams', teamOpts) +
+      group(`Teams on ${rootOf(n).title}`, mineTeams.map(teamOpt)) +
+      group(mineTeams.length ? 'Other teams' : 'Teams', otherTeams.map(teamOpt)) +
       group(`People on ${root.title}`, mine.map(p => opt('person:' + p, p, false))) +
       group('Other people', others.map(p => opt('person:' + p, p, false))) +
       opt('new', '+ Someone new…', false) + opt('newteam', '+ Create a new team…', false);
@@ -1341,7 +1362,7 @@ function renderTeams() {
   if ($('#teamsDlg').hidden) return;
   $('#allPeople').innerHTML = allPeople().map(p => `<option value="${esc(p)}">`).join('');
   $('#teamList').innerHTML = state.teams.map(t => {
-    const uses = state.nodes.filter(n => n.teamId === t.id).length, tasks = state.nodes.filter(n => n.assigneeTeam === t.id).length;
+    const uses = state.nodes.filter(n => n.teamIds.includes(t.id)).length, tasks = state.nodes.filter(n => n.assigneeTeam === t.id).length;
     const usage = [uses && `${uses} project${uses > 1 ? 's' : ''}`, tasks && `${tasks} task${tasks > 1 ? 's' : ''}`].filter(Boolean).join(' · ') || 'Not used yet';
     return `<div class="team-card" data-id="${t.id}" style="--c:${t.color}">` +
       `<div class="team-top">${teamBadge(t)}<input class="team-name" value="${esc(t.name)}" aria-label="Team name" maxlength="100">` +
@@ -1359,7 +1380,7 @@ function createTeam() {
   state.teams.push(t);
   // created from a project or task picker: use it there straight away
   const n = teamFor && byId.get(teamFor);
-  if (n) { if (n.parentId) { n.assigneeTeam = t.id; n.assignee = ''; } else n.teamId = t.id; }
+  if (n) { if (n.parentId) { n.assigneeTeam = t.id; n.assignee = ''; } else n.teamIds.push(t.id); }
   teamFor = null;
   $('#newTeamName').value = '';
   render();
@@ -1397,10 +1418,10 @@ $('#teamList').addEventListener('click', e => {
   const rm = e.target.closest('.chip button[data-idx]');
   if (rm) { snapshot(); t.members.splice(+rm.dataset.idx, 1); render(); return; }
   if (e.target.closest('.team-del')) {
-    const used = state.nodes.filter(n => n.teamId === t.id || n.assigneeTeam === t.id);
+    const used = state.nodes.filter(n => n.teamIds.includes(t.id) || n.assigneeTeam === t.id);
     if (used.length && !confirm(`Delete "${t.name}"? It is used on ${used.length} item${used.length > 1 ? 's' : ''}; they will be left without this team.`)) return;
     snapshot();
-    for (const n of used) { if (n.teamId === t.id) n.teamId = null; if (n.assigneeTeam === t.id) n.assigneeTeam = null; }
+    for (const n of used) { n.teamIds = n.teamIds.filter(id => id !== t.id); if (n.assigneeTeam === t.id) n.assigneeTeam = null; }
     state.teams = state.teams.filter(x => x !== t);
     render();
     toast(`Deleted team "${t.name}" — Ctrl+Z to undo`);
@@ -1693,7 +1714,7 @@ async function exportBranch(id) {
   const nodes = [n, ...descendants(id)].map(x => ({ ...x }));
   nodes[0].parentId = null;
   nodes[0].color = colorOf(n);
-  const teams = state.teams.filter(t => nodes.some(x => x.teamId === t.id || x.assigneeTeam === t.id));
+  const teams = state.teams.filter(t => nodes.some(x => x.teamIds.includes(t.id) || x.assigneeTeam === t.id));
   download({ version: 1, nodes, teams, view: state.view, files: await packFiles(nodes) }, `mindmap-${slug(n.title)}-${todayStr()}.json`);
   toast(`Exported "${n.title}"`);
 }
@@ -1722,7 +1743,7 @@ function addNodes(list, teams = []) {
   const dy = bottom === -Infinity ? 0 : bottom + 80 - Math.min(...list.map(n => n.y));
   const added = list.map(n => ({
     ...n, id: ids.get(n.id), parentId: n.parentId ? ids.get(n.parentId) : null, x: n.x + dx, y: n.y + dy,
-    teamId: teamIds.get(n.teamId) || null, assigneeTeam: teamIds.get(n.assigneeTeam) || null
+    teamIds: n.teamIds.map(id => teamIds.get(id)).filter(Boolean), assigneeTeam: teamIds.get(n.assigneeTeam) || null
   }));
   state.nodes.push(...added);
   return added.find(n => !n.parentId)?.id;
@@ -1841,9 +1862,18 @@ editField($('#fRemark'), (n, v) => n.remark = v);
 $('#fTeam').addEventListener('change', e => {
   const n = byId.get(sel);
   if (!n) return;
-  if (e.target.value === 'new') { openTeams(n.id); return; }
+  const v = e.target.value;
+  if (v === 'new') { openTeams(n.id); return; }
+  if (!v || n.teamIds.includes(v)) { renderPanel(); return; }
   snapshot();
-  n.teamId = e.target.value || null;
+  n.teamIds.push(v);
+  render();
+});
+$('#fTeams').addEventListener('click', e => {
+  const b = e.target.closest('button[data-team]'), n = byId.get(sel);
+  if (!b || !n) return;
+  snapshot();
+  n.teamIds = n.teamIds.filter(id => id !== b.dataset.team);
   render();
 });
 $('#fPersonAdd').addEventListener('change', e => {
