@@ -519,6 +519,41 @@ body.dropping::after {
   #search { width: 130px; }
   .hint { display: none; }
 }
+/* ---------- Printable report (PDF) ---------- */
+#report { display: none; }
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  html, body { height: auto; overflow: visible; background: #fff !important; }
+  body > :not(#report) { display: none !important; }
+  #report { display: block; color: #1a1d24; font: 10.5pt/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+}
+#report h1 { font-size: 18pt; margin: 0 0 2px; }
+#report .rp-meta { color: #5f6675; margin-bottom: 14px; }
+#report h2 { font-size: 13pt; margin: 18px 0 6px; display: flex; align-items: center; gap: 8px; break-after: avoid; }
+#report h2 i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+#report h2 small { font-weight: 400; color: #5f6675; font-size: 10pt; }
+#report table { width: 100%; border-collapse: collapse; }
+#report th { text-align: left; font-size: 9pt; color: #5f6675; font-weight: 600; border-bottom: 1.5px solid #c9ced8; padding: 4px 6px; }
+#report td { border-bottom: 1px solid #e3e6ec; padding: 4px 6px; vertical-align: top; }
+#report tr { break-inside: avoid; }
+#report td.nw { white-space: nowrap; }
+/* task tables share column widths, so they line up from one project to the next */
+#report .rp-tasks { table-layout: fixed; }
+#report .rp-tasks th:nth-child(1) { width: 38%; }
+#report .rp-tasks th:nth-child(2) { width: 11%; }
+#report .rp-tasks th:nth-child(3) { width: 7%; }
+#report .rp-tasks th:nth-child(4) { width: 14%; }
+#report .rp-tasks th:nth-child(n+5) { width: 10%; }
+#report .rp-tasks td { overflow-wrap: anywhere; }
+#report .rp-t { padding-left: calc(var(--d) * 16px); }
+#report .rp-t b { font-weight: 600; }
+#report .rp-note { color: #5f6675; font-size: 9pt; white-space: pre-wrap; }
+#report tr.done .rp-t span, #report tr.done td.st { color: #8a90a0; text-decoration: line-through; }
+#report .late { color: #c42b31; font-weight: 600; }
+#report .pbar { display: inline-block; vertical-align: middle; width: 70px; height: 7px; border-radius: 4px; background: #e3e6ec; overflow: hidden; margin-right: 6px; }
+#report .pbar i { display: block; height: 100%; background: #1f9d55; }
+#report .p-high { color: #c42b31; font-weight: 600; }
+#report .p-medium { color: #b36b00; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -539,6 +574,7 @@ body.dropping::after {
     <button class="btn icon" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo"><span data-i="redo"></span></button>
     <button class="btn" id="exportBtn" title="Download a backup"><span data-i="download"></span>Export</button>
     <button class="btn" id="importBtn" title="Load a backup — or drag a .json file onto the page"><span data-i="upload"></span>Import</button>
+    <button class="btn" id="reportBtn" title="A report people can read: Excel or PDF"><span data-i="file"></span>Report</button>
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <button class="btn primary" id="installBtn" title="Install as an app on this computer" hidden><span data-i="download"></span>Install app</button>
     <button class="btn icon" id="themeBtn" title="Theme" aria-label="Theme"></button>
@@ -633,6 +669,7 @@ body.dropping::after {
     <div class="btns">
       <button class="btn" id="dAdd"><span data-i="plus"></span>Sub-task</button>
       <button class="btn" id="dExport" title="Download only this item and everything under it"><span data-i="download"></span>Export</button>
+      <button class="btn" id="dReport" title="A readable report of this item: Excel or PDF"><span data-i="file"></span>Report</button>
       <button class="btn danger" id="dDel"><span data-i="trash"></span>Delete</button>
     </div>
     <div class="keys">
@@ -765,7 +802,8 @@ const FMT = {
   weekday: new Intl.DateTimeFormat(undefined, { weekday: 'short' }),
   full: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
   month: new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }),
-  monthLong: new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
+  monthLong: new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }),
+  date: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 };
 const shortDate = s => FMT.short.format(parseDate(s));
 const weekday = s => FMT.weekday.format(parseDate(s));
@@ -2309,6 +2347,211 @@ function addNodes(list, teams = []) {
   state.nodes.push(...added);
   return added.find(n => !n.parentId)?.id;
 }
+/* ---------- Readable reports: Excel (.xlsx) and PDF (print) ---------- */
+// one row per item, in map order, with everything a person would want to read
+function reportRows(roots) {
+  const today = todayStr(), memo = new Map(), rows = [];
+  const walk = (n, d, root) => {
+    const ch = childrenOf(n.id), pr = ch.length ? prog(n, memo) : null;
+    const late = !n.done && !!n.dueDate && n.dueDate < today, team = teamById(n.assigneeTeam);
+    rows.push({
+      n, d, root, late,
+      type: TYPES[n.type][1],
+      status: n.done ? 'Done' : late ? `Overdue (${-daysUntil(n.dueDate)}d)` : n.dueDate === today ? 'Due today' : 'Open',
+      prio: PRIO[n.priority]?.[0] || '',
+      who: !n.parentId ? [...teamsOf(n).map(t => t.name), ...n.members].join(', ') : team ? `${team.name} (team)` : n.assignee,
+      pct: pr ? pr.done / pr.total : null, progress: pr ? `${pr.done}/${pr.total}` : '',
+      repeat: REPEAT[n.repeat]?.[0] || '',
+      doneOn: n.done && n.doneAt ? fmtDate(new Date(n.doneAt)) : null,
+      files: n.attachments.map(a => a.name).join(', ')
+    });
+    for (const c of ch) walk(c, d + 1, root);
+  };
+  for (const r of roots) walk(r, 0, r);
+  return rows;
+}
+// per top item: how far along it is
+function reportSummary(roots) {
+  const today = todayStr();
+  return roots.map(r => {
+    // count the actual tasks: the items at the ends of the branches (or the item itself if it has none)
+    const all = [r, ...descendants(r.id)], leaves = childrenOf(r.id).length ? all.filter(n => n !== r && !childrenOf(n.id).length) : [r];
+    const done = leaves.filter(n => n.done).length;
+    const dates = all.flatMap(n => [n.startDate, n.dueDate]).filter(Boolean).sort();
+    return {
+      r, total: leaves.length, done, open: leaves.length - done,
+      overdue: all.filter(n => !n.done && n.dueDate && n.dueDate < today).length,
+      pct: leaves.length ? done / leaves.length : 0,
+      start: r.startDate || dates[0] || null, due: r.dueDate || dates.at(-1) || null,
+      who: (r.parentId ? [] : [...teamsOf(r).map(t => t.name), ...projectPeople(r)]).join(', ')
+    };
+  });
+}
+const reportScope = id => {
+  const n = id && byId.get(id);
+  return n ? { roots: [n], title: n.title || 'Untitled', file: slug(n.title || 'item') }
+    : { roots: state.nodes.filter(x => !x.parentId), title: 'All projects and ideas', file: 'all' };
+};
+// --- Excel: a real .xlsx (a zip of XML files), written here so it works offline
+const CRC_T = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) { let c = i; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[i] = c >>> 0; }
+  return t;
+})();
+const crc32 = b => { let c = -1; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+function zipFiles(files, type) {
+  const enc = new TextEncoder(), parts = [], dir = [];
+  let off = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name), data = enc.encode(f.data), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30)), c = new DataView(new ArrayBuffer(46));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(12, 0x21, true);
+    h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true);
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(14, 0x21, true);
+    c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true);
+    c.setUint32(42, off, true);
+    parts.push(h, name, data);
+    dir.push(c, name);
+    off += 30 + name.length + data.length;
+  }
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true);
+  end.setUint32(12, dir.reduce((t, x) => t + x.byteLength, 0), true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...dir, end], { type });
+}
+const xEsc = v => String(v).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+const xlDate = s => Math.round((parseDate(s) - new Date(1899, 11, 30)) / 864e5);
+// styles: 0 text, 1 header, 2 date, 3 project, 4 project date, 5 done, 6 done date, 7 red, 8 %, 9 project %, 10 wrapped, 11 red date, 12 bold
+const XL_STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<numFmts count="1"><numFmt numFmtId="164" formatCode="d mmm yyyy"/></numFmts>
+<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font>
+<font><strike/><sz val="11"/><color rgb="FF8A90A0"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFC42B31"/><name val="Calibri"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFD9DEEA"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF0FF"/></patternFill></fill></fills>
+<borders count="2"><border/><border><bottom style="thin"><color rgb="FF9AA1B2"/></bottom></border></borders>
+<cellStyleXfs count="1"><xf/></cellStyleXfs>
+<cellXfs count="13"><xf/><xf fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/>
+<xf numFmtId="164" applyNumberFormat="1"/><xf fontId="1" fillId="3" applyFont="1" applyFill="1"/>
+<xf numFmtId="164" fontId="1" fillId="3" applyNumberFormat="1" applyFont="1" applyFill="1"/>
+<xf fontId="2" applyFont="1"/><xf numFmtId="164" fontId="2" applyNumberFormat="1" applyFont="1"/><xf fontId="3" applyFont="1"/>
+<xf numFmtId="9" applyNumberFormat="1"/><xf numFmtId="9" fontId="1" fillId="3" applyNumberFormat="1" applyFont="1" applyFill="1"/>
+<xf applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf><xf numFmtId="164" fontId="3" applyNumberFormat="1" applyFont="1"/>
+<xf fontId="1" applyFont="1"/></cellXfs>
+</styleSheet>`;
+// rows of cells; a cell is a string, a number, null, or { v, s, date }
+function xlSheet(widths, rows) {
+  const col = i => String.fromCharCode(65 + i);
+  const cell = (v, r, i) => {
+    if (v == null || v === '') return '';
+    const o = typeof v === 'object' ? v : { v }, ref = col(i) + r, st = o.s ? ` s="${o.s}"` : '';
+    if (o.v == null || o.v === '') return o.s ? `<c r="${ref}"${st}/>` : '';
+    if (o.date) return `<c r="${ref}"${st}><v>${xlDate(o.v)}</v></c>`;
+    if (typeof o.v === 'number') return `<c r="${ref}"${st}><v>${o.v}</v></c>`;
+    return `<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${xEsc(o.v)}</t></is></c>`;
+  };
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols>
+<sheetData>${rows.map((cells, ri) => `<row r="${ri + 1}">${cells.map((v, i) => cell(v, ri + 1, i)).join('')}</row>`).join('')}</sheetData>
+<autoFilter ref="A1:${col(widths.length - 1)}${rows.length}"/>
+</worksheet>`;
+}
+function reportExcel(id) {
+  const { roots, file } = reportScope(id), rows = reportRows(roots), sum = reportSummary(roots);
+  const H = s => ({ v: s, s: 1 });
+  const summary = [
+    ['Project / idea', 'Type', 'Tasks', 'Done', 'Open', 'Overdue', 'Complete', 'Start', 'Due', 'Teams and people'].map(H),
+    ...sum.map(x => [{ v: x.r.title || 'Untitled', s: 12 }, TYPES[x.r.type][1], x.total, x.done, x.open, x.overdue ? { v: x.overdue, s: 7 } : 0,
+      { v: x.pct, s: 8 }, x.start && { v: x.start, date: 1, s: 2 }, x.due && { v: x.due, date: 1, s: 2 }, x.who])
+  ];
+  const tasks = [
+    ['Project / idea', 'Item', 'Type', 'Status', 'Priority', 'Assigned to', 'Start', 'Due', 'Completed on', 'Progress', 'Sub-tasks done',
+      'Repeats', 'Notes', 'Remark', 'Attachments'].map(H),
+    ...rows.map(x => {
+      const top = !x.d, t = top ? 3 : x.n.done ? 5 : 0, dt = top ? 4 : x.n.done ? 6 : 2, wrap = top ? 3 : 10;
+      return [{ v: x.root.title || 'Untitled', s: t }, { v: '    '.repeat(x.d) + (x.n.title || 'Untitled'), s: t }, { v: x.type, s: t },
+        { v: x.status, s: top ? 3 : x.late ? 7 : t }, { v: x.prio, s: x.prio === 'High' && !x.n.done ? 7 : t }, { v: x.who, s: t },
+        { v: x.n.startDate, date: 1, s: dt }, { v: x.n.dueDate, date: 1, s: x.late && !top ? 11 : dt }, { v: x.doneOn, date: 1, s: dt },
+        { v: x.pct, s: top ? 9 : 8 }, { v: x.progress, s: t }, { v: x.repeat, s: t },
+        { v: x.n.notes.trim(), s: wrap }, { v: x.n.remark.trim(), s: wrap }, { v: x.files, s: wrap }];
+    })
+  ];
+  const ct = 'application/vnd.openxmlformats-officedocument.spreadsheetml';
+  const blob = zipFiles([
+    { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="${ct}.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="${ct}.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="${ct}.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="${ct}.styles+xml"/></Types>` },
+    { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Summary" sheetId="1" r:id="rId1"/><sheet name="Tasks" sheetId="2" r:id="rId2"/></sheets></workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', data: XL_STYLES },
+    { name: 'xl/worksheets/sheet1.xml', data: xlSheet([34, 10, 8, 8, 8, 10, 11, 13, 13, 40], summary) },
+    { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 50, 36, 30], tasks) }
+  ], ct + '.sheet');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mindmap-report-${file}-${todayStr()}.xlsx`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast('Excel report downloaded');
+}
+// --- PDF: a clean printable page; the print window's "Save as PDF" makes the file
+function reportPrint(id) {
+  const { roots, title, file } = reportScope(id), rows = reportRows(roots), sum = reportSummary(roots);
+  const d = s => s ? FMT.date.format(parseDate(s)) : '';
+  const bar = p => `<span class="pbar"><i style="width:${Math.round(p * 100)}%"></i></span>${Math.round(p * 100)}%`;
+  const total = sum.reduce((t, x) => t + x.total, 0), done = sum.reduce((t, x) => t + x.done, 0), late = sum.reduce((t, x) => t + x.overdue, 0);
+  let html = `<h1>${esc(title)}</h1><div class="rp-meta">Report from Mind Map Scheduler · ${FMT.full.format(new Date())} · ` +
+    `${done} of ${total} tasks done${late ? ` · <span class="late">${late} overdue</span>` : ''}</div>`;
+  if (sum.length > 1) html += `<table><thead><tr><th>Project / idea</th><th>Progress</th><th>Done</th><th>Overdue</th><th>Start</th><th>Due</th><th>Teams and people</th></tr></thead><tbody>` +
+    sum.map(x => `<tr><td><b>${esc(x.r.title || 'Untitled')}</b></td><td class="nw">${bar(x.pct)}</td><td class="nw">${x.done}/${x.total}</td>` +
+      `<td class="nw${x.overdue ? ' late' : ''}">${x.overdue || ''}</td><td class="nw">${d(x.start)}</td><td class="nw">${d(x.due)}</td><td>${esc(x.who)}</td></tr>`).join('') + '</tbody></table>';
+  for (const x of sum) {
+    const mine = rows.filter(r => r.root === x.r && r.d > 0);
+    html += `<h2 style="--c:${colorOf(x.r)}"><i></i>${esc(x.r.title || 'Untitled')}<small>${TYPES[x.r.type][1]} · ${x.done}/${x.total} done · ${Math.round(x.pct * 100)}%` +
+      `${x.due ? ' · due ' + d(x.due) : ''}${x.who ? ' · ' + esc(x.who) : ''}</small></h2>`;
+    if (x.r.notes.trim()) html += `<div class="rp-note">${esc(x.r.notes.trim())}</div>`;
+    if (!mine.length) { html += '<div class="rp-note">No tasks yet.</div>'; continue; }
+    html += `<table class="rp-tasks"><thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Assigned to</th><th>Start</th><th>Due</th><th>Completed</th></tr></thead><tbody>` +
+      mine.map(r => `<tr class="${r.n.done ? 'done' : ''}"><td class="rp-t" style="--d:${r.d - 1}">${r.pct != null ? '<b>' : ''}<span>${esc(r.n.title || 'Untitled')}</span>${r.pct != null ? '</b>' : ''}` +
+        `${r.repeat ? ` <small>(${r.repeat.toLowerCase()})</small>` : ''}${r.progress ? ` <small>${r.progress}</small>` : ''}` +
+        `${r.n.notes.trim() ? `<div class="rp-note">${esc(r.n.notes.trim())}</div>` : ''}${r.n.remark.trim() ? `<div class="rp-note">Remark: ${esc(r.n.remark.trim())}</div>` : ''}` +
+        `${r.files ? `<div class="rp-note">Attachments: ${esc(r.files)}</div>` : ''}</td>` +
+        `<td class="nw st${r.late ? ' late' : ''}">${r.status}</td><td class="nw ${r.prio && !r.n.done ? 'p-' + r.n.priority : ''}">${r.prio}</td><td>${esc(r.who)}</td>` +
+        `<td class="nw">${d(r.n.startDate)}</td><td class="nw${r.late ? ' late' : ''}">${d(r.n.dueDate)}</td><td class="nw">${d(r.doneOn)}</td></tr>`).join('') + '</tbody></table>';
+  }
+  $('#report').innerHTML = html;
+  // the print window offers the page title as the PDF's file name
+  const keepTitle = document.title;
+  document.title = `mindmap-report-${file}-${todayStr()}`;
+  const cleanUp = () => { document.title = keepTitle; $('#report').innerHTML = ''; removeEventListener('afterprint', cleanUp); };
+  addEventListener('afterprint', cleanUp);
+  print();
+}
+async function openReport(id) {
+  const { title } = reportScope(id);
+  const how = await choose('Report', `A report of "${title}" that anyone can read. ` +
+    'PDF opens the print window: pick "Save as PDF" as the printer.', [
+    { label: 'Cancel', value: null },
+    { label: 'PDF', value: 'pdf' },
+    { label: 'Excel', value: 'xlsx', primary: true }
+  ]);
+  if (how === 'xlsx') reportExcel(id);
+  else if (how === 'pdf') reportPrint(id);
+}
+$('#reportBtn').onclick = () => openReport(null);
+$('#dReport').onclick = () => sel && openReport(sel);
 $('#importBtn').onclick = () => $('#importFile').click();
 $('#importFile').onchange = e => {
   const f = e.target.files[0];
@@ -2613,5 +2856,6 @@ async function protectStorage() {
 }
 protectStorage();
 </script>
+<div id="report"></div>
 </body>
 </html>

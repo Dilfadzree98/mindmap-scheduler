@@ -13,6 +13,7 @@ Open the link in **Chrome** or **Edge** and click **Install app** in the top bar
 Your maps and attachments are saved in your own browser on your own computer. Nothing is uploaded, and other people can't see your map.
 
 - **Back up or move your map:** click **Export** to save a `.json` file, which includes attachments. Use **Import** on another browser or computer to load it.
+- **A report people can read:** click **Report** (top bar for everything, or in the side panel for one project) and pick **Excel** (a .xlsx with a Summary and a Tasks sheet) or **PDF** (the print window opens: choose *Save as PDF*).
 - **Share a single project:** select it and click **Export** in the side panel. The other person imports it and chooses **Add to my map**.
 
 ## Features
