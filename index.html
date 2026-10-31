@@ -272,6 +272,36 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 .pill.remark { color: var(--accent); border-color: currentColor; }
+.pill.prio .i { fill: currentColor; }
+.pill.p-high { color: #fff; background: var(--bad); border-color: var(--bad); }
+.pill.p-medium { color: var(--warn); border-color: currentColor; }
+.pill.p-low { color: var(--muted); }
+#details .seg { display: flex; margin-top: 4px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+#details .seg button {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 4px;
+  border: none; border-left: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12.5px; cursor: pointer;
+}
+#details .seg button:first-child { border-left: none; }
+#details .seg button:hover { color: var(--text); }
+#details .seg .i { width: 13px; height: 13px; fill: currentColor; }
+#details .seg button.on { background: var(--accent); color: #fff; }
+#details .seg button.on[data-p=high] { background: var(--bad); }
+#details .seg button.on[data-p=medium] { background: var(--warn); }
+#details .seg button.on[data-p=low] { background: var(--muted); }
+#details .seg button:not(.on)[data-p=high] .i { color: var(--bad); }
+#details .seg button:not(.on)[data-p=medium] .i { color: var(--warn); }
+.ag-flag { flex: none; display: inline-flex; }
+.ag-flag .i { width: 12px; height: 12px; fill: currentColor; }
+.ag-flag.p-high { color: var(--bad); }
+.ag-flag.p-medium { color: var(--warn); }
+.ag-flag.p-low { color: var(--muted); }
+.ag-t { display: flex; align-items: center; gap: 5px; }
+.ag-t span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.ag-sort {
+  flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.ag-sort[aria-pressed=true] { color: var(--accent); border-color: currentColor; }
 
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(10, 14, 24, .5); display: grid; place-items: center; padding: 16px; }
 .overlay[hidden] { display: none; }
@@ -458,6 +488,14 @@ body.dropping::after {
     <label>Type
       <select id="fType"><option value="project">Project</option><option value="idea">Idea</option><option value="task">Task</option></select>
     </label>
+    <div class="flabel">Priority
+      <div class="seg" id="fPrio">
+        <button data-p="" title="No priority (0)">None</button>
+        <button data-p="high" title="High priority (1)"><span data-i="flag"></span>High</button>
+        <button data-p="medium" title="Medium priority (2)"><span data-i="flag"></span>Medium</button>
+        <button data-p="low" title="Low priority (3)"><span data-i="flag"></span>Low</button>
+      </div>
+    </div>
     <div class="flabel">Color
       <div class="swatches"><span id="fSwatches"></span><label class="swatch custom" title="Pick any colour"><input type="color" id="fColor" aria-label="Pick any colour"></label></div>
     </div>
@@ -500,6 +538,7 @@ body.dropping::after {
       <kbd>Tab</kbd> add sub-task · <kbd>Enter</kbd> add sibling<br>
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
+      <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> high / medium / low priority · <kbd>0</kbd> none<br>
       <kbd>R</kbd> arrange the map · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
     </div>
@@ -574,6 +613,7 @@ const ICONS = {
   notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   remark: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronRight: '<path d="m9 18 6-6-6-6"/>',
   chevronUp: '<path d="m18 15-6-6-6 6"/>',
@@ -586,6 +626,9 @@ const ICONS = {
 };
 const icon = name => `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 const TYPES = { project: ['folder', 'Project'], idea: ['bulb', 'Idea'], task: ['task', 'Task'] };
+// priority: label and sort rank (higher first)
+const PRIO = { high: ['High', 3], medium: ['Medium', 2], low: ['Low', 1] };
+const prioRank = n => PRIO[n.priority]?.[1] || 0;
 document.querySelectorAll('[data-i]').forEach(el => el.outerHTML = icon(el.dataset.i));
 
 let state, sel = null, hideDone = false, query = '', agendaOpen = true;
@@ -711,7 +754,7 @@ function makeNode(o) {
   return Object.assign({
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
     teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
-    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null
+    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null
   }, o);
 }
 let saveTimer;
@@ -784,7 +827,8 @@ function sanitize(d) {
       done: !!r.done, collapsed: !!r.collapsed, expanded: !!r.expanded,
       startDate: isDate(r.startDate) ? r.startDate : null,
       dueDate: isDate(r.dueDate) ? r.dueDate : null,
-      createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null
+      createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null,
+      priority: PRIO[r.priority] ? r.priority : null
     }));
   }
   const m = new Map(nodes.map(n => [n.id, n]));
@@ -843,6 +887,7 @@ function cardFor(n, memo, q) {
   let html = `<div class="row"><button class="chk" title="Mark done (Space)" aria-label="Toggle done">${n.done ? icon('check') : ''}</button>` +
     `<div class="tw">${typeIcon}<span class="title">${n.title ? esc(n.title) : '<i class="ph">Untitled</i>'}</span></div></div>`;
   const meta = [];
+  if (PRIO[n.priority] && !n.done) meta.push(`<span class="pill prio p-${n.priority}" title="${PRIO[n.priority][0]} priority">${icon('flag')}${PRIO[n.priority][0]}</span>`);
   if (n.done && n.doneAt) {
     const when = new Date(n.doneAt), day = fmtDate(when);
     const late = n.dueDate && day > n.dueDate ? daysUntil(day) - daysUntil(n.dueDate) : 0;
@@ -963,6 +1008,10 @@ function projectsHtml() {
     || '<p class="empty">No projects yet. Click <b>Project</b> in the top bar to start one.</p>';
 }
 const agCollapsed = new Set(['done']);
+let agPrio = ''; // '' = any, 'high' / 'medium' / 'low', or '-' = no priority
+const SORT_KEY = 'mindmap-scheduler-prio-sort';
+let agPrioSort = false;
+try { agPrioSort = localStorage.getItem(SORT_KEY) === '1'; } catch (e) { }
 let agPerson = ''; // '' = everyone, '-' = unassigned, 'team:<id>' or 'person:<name>'
 // does this item belong to the agenda filter? Team tasks count for each member, and vice versa.
 function forFilter(n) {
@@ -993,7 +1042,7 @@ function renderAgenda() {
   // drop a filter whose team/person no longer exists
   if (agPerson.startsWith('team:') && !teamById(agPerson.slice(5))) agPerson = '';
   if (agPerson.startsWith('person:') && !people.some(p => sameName(p, agPerson.slice(7)))) agPerson = '';
-  const wanted = forFilter;
+  const wanted = n => forFilter(n) && (!agPrio || (agPrio === '-' ? !PRIO[n.priority] : n.priority === agPrio));
   for (const n of state.nodes) {
     if (!wanted(n)) continue;
     if (n.done) g.done.push(n);
@@ -1003,13 +1052,17 @@ function renderAgenda() {
     } else if (n.parentId && !childrenOf(n.id).length) g.nodate.push(n);
   }
   for (const k of ['overdue', 'today', 'week', 'later']) g[k].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  // "High first" keeps the date order within each priority
+  if (agPrioSort) for (const k of ['overdue', 'today', 'week', 'later', 'nodate']) g[k].sort((a, b) => prioRank(b) - prioRank(a));
   g.done = g.done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 10);
   const row = n => {
     const root = rootOf(n);
     const where = (root !== n ? root.title : TYPES[n.type][1]) + (n.startDate && !n.done ? ' · starts ' + shortDate(n.startDate) : '');
     return `<div class="ag-row${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}">` +
       `<button class="ag-chk" title="${n.done ? 'Mark not done' : 'Mark done'}" aria-label="Toggle done">${icon('check')}</button>` +
-      `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">${esc(n.title || 'Untitled')}</div>` +
+      `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">` +
+      `${PRIO[n.priority] && !n.done ? `<span class="ag-flag p-${n.priority}" title="${PRIO[n.priority][0]} priority">${icon('flag')}</span>` : ''}` +
+      `<span>${esc(n.title || 'Untitled')}</span></div>` +
       `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div></div>` +
       `${teamById(n.assigneeTeam) ? teamBadge(teamById(n.assigneeTeam)) : n.assignee ? avatar(n.assignee) : ''}${agDate(n)}</div>`;
   };
@@ -1027,7 +1080,11 @@ function renderAgenda() {
       (state.teams.length ? `<optgroup label="Teams">${state.teams.map(t => `<option value="team:${t.id}"${agPerson === 'team:' + t.id ? ' selected' : ''}>${esc(t.name)}</option>`).join('')}</optgroup>` : '') +
       (people.length ? `<optgroup label="People">${people.map(p => `<option value="person:${esc(p)}"${agPerson.startsWith('person:') && sameName(p, agPerson.slice(7)) ? ' selected' : ''}>${esc(p)}</option>`).join('')}</optgroup>` : '') +
       `<option value="-"${agPerson === '-' ? ' selected' : ''}>Unassigned</option></select></label>` : '') +
-    (body || `<p class="empty">${agPerson ? 'Nothing here for this selection.' : 'Nothing scheduled yet. Select a task and set a due date.'}</p>`);
+    `<div class="ag-filter">${icon('flag')}<span>Priority</span><select id="agPrio" aria-label="Priority filter">` +
+      [['', 'Any'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['-', 'No priority']]
+        .map(([v, l]) => `<option value="${v}"${agPrio === v ? ' selected' : ''}>${l}</option>`).join('') +
+      `</select><button class="ag-sort" aria-pressed="${agPrioSort}" title="Put high priority at the top of each group">High first</button></div>` +
+    (body || `<p class="empty">${agPerson || agPrio ? 'Nothing here for this selection.' : 'Nothing scheduled yet. Select a task and set a due date.'}</p>`);
 }
 function renderSwatches(n) {
   const cur = colorOf(n).toLowerCase(), own = n.color?.toLowerCase();
@@ -1104,6 +1161,11 @@ function renderPanel() {
   setVal($('#fType'), n.type);
   setVal($('#fColor'), colorOf(n));
   renderSwatches(n);
+  for (const b of $('#fPrio').children) {
+    const on = b.dataset.p === (n.priority || '');
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+  }
   setVal($('#fStart'), n.startDate || '');
   setVal($('#fDue'), n.dueDate || '');
   $('#fDone').checked = n.done;
@@ -1657,6 +1719,12 @@ $('#agenda').addEventListener('click', e => {
   }
   const pj = e.target.closest('.pj-row');
   if (pj) { focusNode(pj.dataset.id); return; }
+  if (e.target.closest('.ag-sort')) {
+    agPrioSort = !agPrioSort;
+    try { localStorage.setItem(SORT_KEY, agPrioSort ? '1' : ''); } catch (err) { }
+    renderAgenda();
+    return;
+  }
   const sh = e.target.closest('.ag-sh');
   if (sh) {
     const k = sh.parentElement.dataset.key;
@@ -1670,8 +1738,9 @@ $('#agenda').addEventListener('click', e => {
   else focusNode(it.dataset.id);
 });
 $('#agenda').addEventListener('change', e => {
-  if (e.target.id !== 'agPerson') return;
-  agPerson = e.target.value;
+  if (e.target.id === 'agPerson') agPerson = e.target.value;
+  else if (e.target.id === 'agPrio') agPrio = e.target.value;
+  else return;
   renderAgenda();
 });
 // keep buttons from holding focus, so Space/Enter go to the map shortcuts
@@ -1685,6 +1754,7 @@ function arrangeMap() {
   fitView();
   toast('Map arranged');
 }
+const togglePriority = p => { const n = byId.get(sel); setPriority(n, n.priority === p ? null : p); };
 document.addEventListener('keydown', e => {
   const t = e.target;
   if (!$('#viewer').hidden) { if (e.key === 'Escape') $('#viewer').hidden = true; return; }
@@ -1712,6 +1782,7 @@ document.addEventListener('keydown', e => {
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
     e: () => toggleExpand(sel), E: () => toggleExpand(sel),
+    1: () => togglePriority('high'), 2: () => togglePriority('medium'), 3: () => togglePriority('low'), 0: () => togglePriority(null),
     Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
@@ -1969,6 +2040,18 @@ $('#fAssignNew').addEventListener('keydown', e => {
   if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
 });
 editField($('#fColor'), (n, v) => n.color = v);
+function setPriority(n, p) {
+  p = PRIO[p] ? p : null;
+  if ((n.priority || null) === p) return;
+  snapshot();
+  n.priority = p;
+  render();
+  toast(p ? `${PRIO[p][0]} priority` : 'Priority removed');
+}
+$('#fPrio').addEventListener('click', e => {
+  const b = e.target.closest('button'), n = byId.get(sel);
+  if (b && n) setPriority(n, b.dataset.p);
+});
 $('#fSwatches').addEventListener('click', e => {
   const b = e.target.closest('.swatch'), n = byId.get(sel);
   if (!b || !n) return;

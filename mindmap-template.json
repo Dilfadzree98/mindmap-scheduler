@@ -6,6 +6,7 @@
     "'type' is 'project', 'idea' or 'task'.",
     "Dates are written YYYY-MM-DD, e.g. 2026-11-30. Use null for no date.",
     "'assignee' is one person's name. 'assigneeTeam' is a team id from 'teams' (use one or the other, or neither).",
+    "'priority' is 'high', 'medium' or 'low'. Leave it out for no priority.",
     "'teamIds' (on projects and ideas) lists the team ids working on it. 'members' lists extra people by name.",
     "You can leave out any field you don't need. Positions are worked out by the app.",
     "Keep the commas and quotes exactly like the examples: a missing comma makes the file invalid.",
@@ -34,6 +35,7 @@
       "title": "First task",
       "notes": "Details for the first task.",
       "assignee": "Alex",
+      "priority": "high",
       "startDate": "2026-11-02",
       "dueDate": "2026-11-06"
     },
