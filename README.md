@@ -26,6 +26,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 - Completion dates, plus a remark when closing an item that still has open sub-tasks
 - Priority flags (High, Medium, Low) with keys 1, 2, 3, plus an agenda filter and "High first" sorting
 - Recurring tasks (daily, weekly, monthly): ticking one done adds the next one automatically
+- Reminders: a pop-up when you open the app lists what is due today or overdue (click the red "overdue" count to see it again), optional Windows notifications, and a nudge to back up after 7 days of changes
 - Teams and people: assign tasks to a person or a whole team, and filter the agenda by either
 - Attachments: paste screenshots with Ctrl+V, or drag files onto a card
 - Undo/redo, search, and light/dark theme
