@@ -1465,10 +1465,12 @@ function fitView() {
 function focusNode(id) {
   const n = byId.get(id);
   if (!n) return;
+  const wasHidden = !isVisible(n);
   ancestors(n).forEach(a => a.collapsed = false);
   if (hideDone && (n.done || ancestors(n).some(a => a.done))) setHideDone(false);
   sel = id;
   render();
+  if (wasHidden) autoArrange(true); // it was folded away or hidden: make room for it
   const s = sizes.get(id) || { w: 0, h: 0 }, r = vp.getBoundingClientRect(), v = state.view;
   v.panX = r.width / 2 - (n.x + s.w / 2) * v.zoom;
   v.panY = r.height / 2 - (n.y + s.h / 2) * v.zoom;
@@ -1985,7 +1987,7 @@ $('#nodes').addEventListener('click', e => {
   const id = card.dataset.id;
   if (e.target.closest('.chk')) toggleDone(id);
   else if (e.target.closest('.add')) addChild(id);
-  else if (e.target.closest('.tog')) { snapshot(); const n = byId.get(id); n.collapsed = !n.collapsed; render(); }
+  else if (e.target.closest('.tog')) { snapshot(); const n = byId.get(id); n.collapsed = !n.collapsed; render(); autoArrange(true); }
   else if (e.target.closest('.xp')) toggleExpand(id);
   else if (e.target.closest('.xfile')) {
     const a = byId.get(id)?.attachments[+e.target.closest('.xfile').dataset.idx];
@@ -2165,7 +2167,8 @@ $('#tlScroll').addEventListener('dblclick', e => {
   focusNode(it.dataset.id);
 });
 $('#arrange').onclick = arrangeMap;
-$('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); };
+// showing or hiding cards changes what's on the map, so re-tidy it to close gaps and avoid overlaps
+$('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); autoArrange(true); };
 $('#agendaBtn').onclick = () => { agendaOpen = !agendaOpen; $('#agendaBtn').setAttribute('aria-pressed', agendaOpen); renderAgenda(); };
 $('#undoBtn').onclick = undo;
 $('#redoBtn').onclick = redo;
