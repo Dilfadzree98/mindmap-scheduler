@@ -275,6 +275,12 @@ aside h2 { font-size: 15px; margin: 0 0 10px; display: flex; align-items: center
 .ag-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
 .ag-row:hover { background: var(--hover); }
 .ag-row.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* a sub-task listed right under its parent: indented, with an elbow line back to it */
+.ag-row.sub { position: relative; margin-left: calc(var(--ind) * 18px); }
+.ag-row.sub::before {
+  content: ''; position: absolute; left: -9px; top: -6px; height: calc(50% + 6px); width: 9px;
+  border-left: 1.5px solid var(--border); border-bottom: 1.5px solid var(--border); border-bottom-left-radius: 6px;
+}
 .ag-chk {
   flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--muted); background: none;
   padding: 0; display: grid; place-items: center; color: transparent;
@@ -1296,22 +1302,31 @@ function renderAgenda() {
   // "High first" keeps the date order within each priority
   if (agPrioSort) for (const k of ['overdue', 'today', 'week', 'later', 'nodate']) g[k].sort((a, b) => prioRank(b) - prioRank(a));
   g.done = g.done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 10);
-  const row = n => {
-    const root = rootOf(n);
-    const where = (root !== n ? root.title : TYPES[n.type][1]) + (n.startDate && !n.done ? ' · starts ' + shortDate(n.startDate) : '');
-    return `<div class="ag-row${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}">` +
+  // within a group, sub-tasks follow their parent (when it's in the same group) and are indented under it
+  const nest = list => {
+    const inGroup = new Set(list.map(n => n.id)), out = [];
+    const up = n => ancestors(n).find(a => inGroup.has(a.id));
+    const add = (n, d) => { out.push([n, d]); for (const k of list) if (up(k) === n) add(k, d + 1); };
+    for (const n of list) if (!up(n)) add(n, 0);
+    return out;
+  };
+  const row = ([n, d]) => {
+    const root = rootOf(n), starts = n.startDate && !n.done ? 'starts ' + shortDate(n.startDate) : '';
+    // an indented row's parent is right above it, so it doesn't repeat the project name
+    const where = d ? starts : (root !== n ? root.title : TYPES[n.type][1]) + (starts ? ' · ' + starts : '');
+    return `<div class="ag-row${d ? ' sub' : ''}${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}" style="--c:${colorOf(n)}${d ? ';--ind:' + d : ''}">` +
       `<button class="ag-chk" title="${n.done ? 'Mark not done' : 'Mark done'}" aria-label="Toggle done">${icon('check')}</button>` +
       `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">` +
       `${PRIO[n.priority] && !n.done ? `<span class="ag-flag p-${n.priority}" title="${PRIO[n.priority][0]} priority">${icon('flag')}</span>` : ''}` +
       `<span>${esc(n.title || 'Untitled')}</span>` +
       `${REPEAT[n.repeat] ? `<span class="ag-rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}">${icon('repeat')}</span>` : ''}</div>` +
-      `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div></div>` +
+      `${where ? `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div>` : ''}</div>` +
       `${teamById(n.assigneeTeam) ? teamBadge(teamById(n.assigneeTeam)) : n.assignee ? avatar(n.assignee) : ''}${agDate(n)}</div>`;
   };
   const sec = (key, label) => !g[key].length ? '' :
     `<section class="ag-sec ${key}${agCollapsed.has(key) ? ' collapsed' : ''}" data-key="${key}">` +
     `<button class="ag-sh">${icon('chevronDown')}<span>${label}</span><span class="ag-cnt">${g[key].length}</span></button>` +
-    `<div class="ag-list">${g[key].map(row).join('')}</div></section>`;
+    `<div class="ag-list">${nest(g[key]).map(row).join('')}</div></section>`;
   const open = state.nodes.filter(n => !n.done && !childrenOf(n.id).length && wanted(n)).length;
   const body = sec('overdue', 'Overdue') + sec('today', 'Today') + sec('week', 'Next 7 days') + sec('later', 'Later') +
     sec('nodate', 'Unscheduled') + sec('done', 'Recently completed');
