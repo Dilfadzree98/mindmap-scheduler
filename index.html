@@ -174,6 +174,61 @@ button.pill:hover { color: var(--text); }
 .node.done .xbody { text-decoration: none; }
 
 /* ---------- Canvas overlay controls ---------- */
+/* ---------- Timeline ---------- */
+#timeline { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--bg); cursor: default; }
+#timeline[hidden] { display: none; }
+.tl-top { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.tl-scale { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: none; }
+.tl-scale button { border: none; border-left: 1px solid var(--border); background: var(--bg); color: var(--muted); padding: 5px 11px; font-size: 12.5px; cursor: pointer; }
+.tl-scale button:first-child { border-left: none; }
+.tl-scale button:hover { color: var(--text); }
+.tl-scale button.on { background: var(--accent); color: #fff; }
+.tl-note { margin-left: auto; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-scroll { flex: 1; overflow: auto; position: relative; }
+.tl-grid { position: relative; --lw: 260px; }
+.tl-head { position: sticky; top: 0; z-index: 3; display: flex; background: var(--panel); border-bottom: 1px solid var(--border); }
+.tl-corner {
+  position: sticky; left: 0; z-index: 4; flex: none; width: var(--lw); display: flex; align-items: flex-end; padding: 0 12px 6px;
+  background: var(--panel); border-right: 1px solid var(--border); font-size: 12px; color: var(--muted);
+}
+.tl-cols { position: relative; flex: none; }
+.tl-m { position: absolute; top: 0; height: 100%; padding: 5px 0 0 6px; border-left: 1px solid var(--border); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.tl-d { position: absolute; bottom: 5px; font-size: 10.5px; color: var(--muted); text-align: center; white-space: nowrap; }
+.tl-d.we { opacity: .6; }
+.tl-d.today { color: var(--accent); font-weight: 700; opacity: 1; }
+.tl-row { display: flex; height: 30px; border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent); }
+.tl-row.group { height: 34px; border-top: 1px solid var(--border); }
+.tl-label {
+  position: sticky; left: 0; z-index: 2; flex: none; width: var(--lw); display: flex; align-items: center; gap: 6px;
+  padding: 0 10px 0 calc(12px + var(--d) * 16px); background: var(--bg); border-right: 1px solid var(--border);
+  font-size: 13px; white-space: nowrap; overflow: hidden; cursor: pointer;
+}
+.tl-row.group .tl-label { font-weight: 600; background: var(--panel); }
+.tl-row:hover .tl-label { background: var(--card); }
+.tl-row.sel .tl-label { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); }
+.tl-label .t { overflow: hidden; text-overflow: ellipsis; }
+.tl-label .i { flex: none; width: 14px; height: 14px; }
+.tl-label .ic { display: inline-flex; color: var(--c); }
+.tl-label .ok { display: inline-flex; color: var(--ok); }
+.tl-label .late { flex: none; margin-left: auto; font-size: 11px; color: var(--bad); font-weight: 600; }
+.tl-row.done .tl-label .t { text-decoration: line-through; color: var(--muted); }
+.tl-track { position: relative; flex: none; }
+.tl-track.wk {
+  background-image: repeating-linear-gradient(90deg, transparent 0 calc(var(--dw) * 5),
+    color-mix(in srgb, var(--muted) 9%, transparent) calc(var(--dw) * 5) calc(var(--dw) * 7));
+}
+.tl-b {
+  position: absolute; top: 7px; height: 16px; min-width: 8px; border-radius: 5px; background: var(--c); color: #fff;
+  font-size: 11px; line-height: 16px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.tl-b.sum { top: 12px; height: 10px; border-radius: 3px; padding: 0; opacity: .55; }
+.tl-row.group .tl-b:not(.sum) { top: 9px; }
+.tl-b.done { opacity: .4; text-decoration: line-through; }
+.tl-b.late { background: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 30%, transparent); }
+.tl-row.sel .tl-b { outline: 2px solid var(--text); outline-offset: 1px; }
+.tl-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); z-index: 1; pointer-events: none; }
+.tl-empty { padding: 40px 24px; color: var(--muted); text-align: center; }
 .zoombar {
   position: absolute; right: 12px; bottom: 12px; display: flex; gap: 4px; align-items: center;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: var(--shadow);
@@ -451,6 +506,7 @@ body.dropping::after {
   <div class="tb">
     <button class="btn primary" id="addProject" title="New project"><span data-i="plus"></span>Project</button>
     <button class="btn" id="addIdea" title="New idea"><span data-i="bulb"></span>Idea</button>
+    <button class="btn" id="viewBtn" aria-pressed="false" title="Switch between the mind map and a timeline of dates (T)"><span data-i="gantt"></span>Timeline</button>
     <button class="btn" id="arrange" title="Tidy up the layout (R)"><span data-i="workflow"></span>Arrange</button>
     <button class="btn" id="hideDone" aria-pressed="false" title="Hide completed items"><span data-i="eyeOff"></span>Hide done</button>
     <button class="btn" id="agendaBtn" aria-pressed="true" title="Show or hide the side panel"><span data-i="panel"></span>Sidebar</button>
@@ -482,6 +538,16 @@ body.dropping::after {
       <span id="zoomLbl">100%</span>
       <button class="btn" id="zoomIn" title="Zoom in">+</button>
       <button class="btn" id="fitBtn" title="Fit everything in view">Fit</button>
+    </div>
+    <div id="timeline" hidden>
+      <div class="tl-top">
+        <div class="tl-scale" id="tlScale" role="group" aria-label="Timeline scale">
+          <button data-s="day">Days</button><button data-s="week">Weeks</button><button data-s="month">Months</button>
+        </div>
+        <button class="btn" id="tlToday" title="Scroll to today"><span data-i="calendar"></span>Today</button>
+        <span class="tl-note" id="tlNote"></span>
+      </div>
+      <div class="tl-scroll" id="tlScroll"></div>
     </div>
   </div>
   <aside id="details" hidden>
@@ -553,7 +619,7 @@ body.dropping::after {
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
       <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> high / medium / low priority · <kbd>0</kbd> none<br>
-      <kbd>R</kbd> arrange the map · <kbd>Esc</kbd> deselect<br>
+      <kbd>R</kbd> arrange the map · <kbd>T</kbd> timeline · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
     </div>
   </aside>
@@ -627,6 +693,7 @@ const ICONS = {
   notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   remark: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  gantt: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 7h8"/><path d="M11 12h8"/><path d="M9 17h4"/>',
   repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
@@ -962,6 +1029,138 @@ function cardFor(n, memo, q) {
   el.innerHTML = html;
   return el;
 }
+/* ---------- Timeline ---------- */
+// A second view over the map: every dated item as a bar from its start to its due date, grouped by project.
+const VIEW_KEY = 'mindmap-scheduler-mainview', TL_KEY = 'mindmap-scheduler-tlscale';
+const TL_DAY = { day: 32, week: 12, month: 4 }; // pixels per day
+let mainView = 'map', tlScale = 'day';
+try {
+  mainView = localStorage.getItem(VIEW_KEY) === 'timeline' ? 'timeline' : 'map';
+  tlScale = TL_DAY[localStorage.getItem(TL_KEY)] ? localStorage.getItem(TL_KEY) : 'day';
+} catch (e) { }
+const dayDiff = (a, b) => Math.round((parseDate(b) - parseDate(a)) / 864e5);
+function tlSpan(n) {
+  let a = n.startDate || n.dueDate, b = n.dueDate || n.startDate;
+  if (!a) return null;
+  if (b < a) [a, b] = [b, a];
+  return [a, b];
+}
+// the name column gives way on narrow screens (or with the side panel open)
+const tlLW = () => Math.round(Math.min(260, Math.max(140, $('#tlScroll').clientWidth * 0.32)));
+function renderTimeline() {
+  if (mainView !== 'timeline') return;
+  const box = $('#tlScroll'), keep = [box.scrollLeft, box.scrollTop], LW = tlLW();
+  const q = query.trim().toLowerCase(), dw = TL_DAY[tlScale], today = todayStr();
+  for (const b of $('#tlScale').children) b.classList.toggle('on', b.dataset.s === tlScale);
+  const shown = n => !(hideDone && n.done) && (!q || matches(n, q));
+  // rows in map order; an undated item still gets a row when it has dated items under it
+  const walk = (n, d) => {
+    const out = [];
+    for (const c of childrenOf(n.id)) {
+      const sub = walk(c, d + 1), span = tlSpan(c);
+      if (shown(c) && span || sub.length) out.push({ n: c, d, span: shown(c) ? span : null }, ...sub);
+    }
+    return out;
+  };
+  const groups = [], left = [];
+  let undated = 0, lo = today, hi = today;
+  for (const r of state.nodes.filter(n => !n.parentId)) {
+    const rows = walk(r, 1), own = shown(r) ? tlSpan(r) : null;
+    undated += descendants(r.id).filter(n => shown(n) && !tlSpan(n) && !childrenOf(n.id).length).length;
+    const spans = rows.map(x => x.span).filter(Boolean);
+    if (!own && !spans.length) { if (shown(r)) left.push(r.title || 'Untitled'); continue; }
+    // a project without its own dates gets a faint bar covering its tasks
+    const span = own || [spans.map(x => x[0]).sort()[0], spans.map(x => x[1]).sort().pop()];
+    groups.push({ r, span, sum: !own, rows });
+    if (span[0] < lo) lo = span[0];
+    if (span[1] > hi) hi = span[1];
+  }
+  const items = groups.reduce((t, g) => t + g.rows.filter(x => x.span).length + (g.sum ? 0 : 1), 0);
+  $('#tlNote').textContent = !groups.length ? '' : `${items} dated item${items === 1 ? '' : 's'}` +
+    (undated ? ` · ${undated} task${undated === 1 ? '' : 's'} without dates not shown` : '') +
+    (left.length ? ` · no dates yet: ${left.join(', ')}` : '');
+  if (!groups.length) {
+    box.innerHTML = `<div class="tl-empty">${q ? 'Nothing with dates matches your search.' : 'Nothing has dates yet. Select a task and give it a start or due date to see it here.'}</div>`;
+    return;
+  }
+  // from the Monday before the earliest date, with room after the latest, and at least the width of the pane
+  let start = shiftDate(lo, -3);
+  start = shiftDate(start, -((parseDate(start).getDay() + 6) % 7));
+  const pad = { day: 10, week: 28, month: 60 }[tlScale], min = { day: 42, week: 120, month: 400 }[tlScale];
+  const days = Math.max(dayDiff(start, hi) + 1 + pad, min, Math.ceil((box.clientWidth - LW) / dw) + 1);
+  const W = days * dw, x = d => dayDiff(start, d) * dw;
+  // header: month names, then days (or week starts)
+  let months = '', ticks = '';
+  for (let i = 0; i < days; i++) {
+    const d = parseDate(shiftDate(start, i)), ds = fmtDate(d), we = d.getDay() === 0 || d.getDay() === 6;
+    if (i === 0 || d.getDate() === 1)
+      months += `<div class="tl-m" style="left:${i * dw}px">${d.toLocaleDateString(undefined, { month: tlScale === 'month' ? 'short' : 'long', year: 'numeric' })}</div>`;
+    if (tlScale === 'day')
+      ticks += `<div class="tl-d${we ? ' we' : ''}${ds === today ? ' today' : ''}" style="left:${i * dw}px;width:${dw}px">${'SMTWTFS'[d.getDay()]} ${d.getDate()}</div>`;
+    else if (tlScale === 'week' && d.getDay() === 1)
+      ticks += `<div class="tl-d" style="left:${i * dw}px;width:${7 * dw}px">${d.getDate()}</div>`;
+  }
+  const track = `tl-track${tlScale !== 'month' ? ' wk' : ''}" style="width:${W}px`;
+  const bar = (n, span, sum) => {
+    const late = !n.done && n.dueDate && n.dueDate < today, w = (dayDiff(span[0], span[1]) + 1) * dw;
+    const when = shortDate(span[0]) + (span[1] !== span[0] ? ' – ' + shortDate(span[1]) : '');
+    const tip = `${n.title || 'Untitled'} · ${sum ? 'tasks run ' : ''}${when}${n.done ? ' · done' : late ? ' · overdue' : ''}`;
+    return `<div class="tl-b${sum ? ' sum' : ''}${n.done ? ' done' : ''}${late && !sum ? ' late' : ''}" data-id="${n.id}" ` +
+      `style="left:${x(span[0])}px;width:${w}px;--c:${colorOf(n)}" title="${esc(tip)}">${!sum && w >= 70 ? esc(n.title) : ''}</div>`;
+  };
+  const row = (n, d, span, group, sum) => {
+    const late = !n.done && n.dueDate && n.dueDate < today;
+    const lead = group ? `<span class="ic" style="--c:${colorOf(n)}">${icon(TYPES[n.type][0])}</span>`
+      : n.done ? `<span class="ok">${icon('check')}</span>`
+      : PRIO[n.priority] ? `<span class="ag-flag p-${n.priority}">${icon('flag')}</span>` : '';
+    return `<div class="tl-row${group ? ' group' : ''}${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}">` +
+      `<div class="tl-label" style="--d:${d}" title="${esc(n.title)}">${lead}<span class="t">${esc(n.title || 'Untitled')}</span>` +
+      `${REPEAT[n.repeat] ? `<span class="ag-rep">${icon('repeat')}</span>` : ''}` +
+      `${late ? `<span class="late">${-daysUntil(n.dueDate)}d late</span>` : ''}</div>` +
+      `<div class="${track}">${span ? bar(n, span, sum) : ''}</div></div>`;
+  };
+  let body = '';
+  for (const g of groups) {
+    body += row(g.r, 0, g.span, true, g.sum);
+    for (const r of g.rows) body += row(r.n, r.d, r.span, false, false);
+  }
+  const showToday = today >= start && dayDiff(start, today) < days;
+  box.innerHTML = `<div class="tl-grid" style="width:${LW + W}px;--dw:${dw}px;--lw:${LW}px">` +
+    `<div class="tl-head" style="height:${tlScale === 'month' ? 30 : 46}px"><div class="tl-corner">${groups.length} project${groups.length === 1 ? '' : 's'}</div>` +
+    `<div class="tl-cols" style="width:${W}px">${months}${ticks}</div></div>${body}` +
+    (showToday ? `<div class="tl-today" style="left:${LW + x(today) + dw / 2}px" title="Today"></div>` : '') + '</div>';
+  [box.scrollLeft, box.scrollTop] = keep;
+}
+// scroll so today (or a given date) sits a little in from the left edge
+function tlScrollTo(date) {
+  const box = $('#tlScroll'), grid = box.querySelector('.tl-grid'), first = box.querySelector('.tl-m');
+  if (!grid || !first) return;
+  const startPx = box.querySelector('.tl-today') && !date ? parseFloat(box.querySelector('.tl-today').style.left) - tlLW() : null;
+  let px = startPx;
+  if (date) {
+    const b = box.querySelector(`.tl-b[data-id="${date}"]`);
+    px = b ? parseFloat(b.style.left) : null;
+  }
+  if (px != null) box.scrollLeft = Math.max(0, px - (box.clientWidth - tlLW()) * 0.2);
+}
+// bring an item's row (and its bar) into view
+function tlReveal(id) {
+  const rowEl = $('#tlScroll').querySelector(`.tl-row[data-id="${id}"]`);
+  if (!rowEl) { toast('This item has no dates, so it isn\'t on the timeline'); return; }
+  rowEl.scrollIntoView({ block: 'nearest' });
+  if (rowEl.querySelector('.tl-b')) tlScrollTo(id);
+}
+function setMainView(v) {
+  mainView = v === 'timeline' ? 'timeline' : 'map';
+  try { localStorage.setItem(VIEW_KEY, mainView); } catch (e) { }
+  $('#timeline').hidden = mainView !== 'timeline';
+  $('#viewBtn').setAttribute('aria-pressed', mainView === 'timeline');
+  $('#arrange').hidden = mainView === 'timeline';
+  if (mainView === 'timeline') {
+    renderTimeline();
+    if (sel && $('#tlScroll').querySelector(`.tl-b[data-id="${sel}"]`)) tlReveal(sel); else tlScrollTo();
+  }
+}
 function render() {
   index();
   const memo = new Map(), layer = $('#nodes'), q = query.trim().toLowerCase();
@@ -978,6 +1177,7 @@ function render() {
   renderPanel();
   renderTeams();
   applyView();
+  renderTimeline();
   save();
 }
 function drawEdges() {
@@ -1263,6 +1463,7 @@ function focusNode(id) {
   v.panY = r.height / 2 - (n.y + s.h / 2) * v.zoom;
   applyView();
   cardEl(id)?.classList.add('flash');
+  if (mainView === 'timeline') tlReveal(id);
 }
 const cardEl = id => document.querySelector(`.node[data-id="${id}"]`);
 
@@ -1282,6 +1483,8 @@ function select(id) {
   sel = id;
   document.querySelectorAll('.node.selected').forEach(el => el.classList.remove('selected'));
   if (id) cardEl(id)?.classList.add('selected');
+  document.querySelectorAll('.tl-row.sel').forEach(el => el.classList.remove('sel'));
+  if (id) document.querySelector(`.tl-row[data-id="${id}"]`)?.classList.add('sel');
   renderPanel();
   renderAgenda();
 }
@@ -1627,6 +1830,13 @@ function deleteNode(id) {
 function startRename(id) {
   const card = cardEl(id), n = byId.get(id);
   if (!card || !n) return;
+  if (mainView === 'timeline') {
+    setMainView('map');
+    const s = sizes.get(id) || { w: 0, h: 0 }, r = vp.getBoundingClientRect(), v = state.view;
+    v.panX = r.width / 2 - (n.x + s.w / 2) * v.zoom;
+    v.panY = r.height / 2 - (n.y + s.h / 2) * v.zoom;
+    applyView();
+  }
   const t = card.querySelector('.title'), old = n.title;
   let finished = false;
   t.textContent = n.title;
@@ -1839,7 +2049,8 @@ document.addEventListener('keydown', e => {
   }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   // R tidies the whole map; it doesn't need a selection
-  if (e.code === 'KeyR' || e.key === 'r' || e.key === 'R') { e.preventDefault(); t.blur?.(); arrangeMap(); return; }
+  if (e.code === 'KeyT' || e.key === 't' || e.key === 'T') { e.preventDefault(); t.blur?.(); setMainView(mainView === 'timeline' ? 'map' : 'timeline'); return; }
+  if (e.code === 'KeyR' || e.key === 'r' || e.key === 'R') { if (mainView === 'map') { e.preventDefault(); t.blur?.(); arrangeMap(); } return; }
   if (!sel || !byId.get(sel)) return;
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
@@ -1847,12 +2058,43 @@ document.addEventListener('keydown', e => {
     1: () => togglePriority('high'), 2: () => togglePriority('medium'), 3: () => togglePriority('low'), 0: () => togglePriority(null),
     Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
   };
+  // adding and renaming happen on the map; expanding a card only matters there
+  if (mainView === 'timeline' && ['Tab', 'Enter', 'F2', 'e', 'E'].includes(e.key)) return;
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
 
 /* ---------- Toolbar ---------- */
-$('#addProject').onclick = () => addRoot('project');
-$('#addIdea').onclick = () => addRoot('idea');
+$('#addProject').onclick = () => { setMainView('map'); addRoot('project'); };
+$('#addIdea').onclick = () => { setMainView('map'); addRoot('idea'); };
+$('#viewBtn').onclick = () => setMainView(mainView === 'timeline' ? 'map' : 'timeline');
+$('#tlScale').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.s === tlScale) return;
+  tlScale = b.dataset.s;
+  try { localStorage.setItem(TL_KEY, tlScale); } catch (err) { }
+  renderTimeline();
+  if (sel && $('#tlScroll').querySelector(`.tl-b[data-id="${sel}"]`)) tlScrollTo(sel); else tlScrollTo();
+});
+$('#tlToday').onclick = () => tlScrollTo();
+// re-fit when the pane changes width (side panel opening, window resize)
+let tlWidth = 0;
+new ResizeObserver(() => {
+  const w = $('#tlScroll').clientWidth;
+  if (w && w !== tlWidth) { tlWidth = w; renderTimeline(); }
+}).observe($('#tlScroll'));
+// the timeline sits inside the map's viewport: keep its clicks, scrolls and drags away from the map's pan/zoom
+for (const ev of ['pointerdown', 'wheel', 'dblclick']) $('#timeline').addEventListener(ev, e => e.stopPropagation());
+$('#tlScroll').addEventListener('click', e => {
+  const it = e.target.closest('[data-id]');
+  if (it) select(it.dataset.id);
+});
+// double-click a row or bar to see that item on the map
+$('#tlScroll').addEventListener('dblclick', e => {
+  const it = e.target.closest('[data-id]');
+  if (!it) return;
+  setMainView('map');
+  focusNode(it.dataset.id);
+});
 $('#arrange').onclick = arrangeMap;
 $('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); };
 $('#agendaBtn').onclick = () => { agendaOpen = !agendaOpen; $('#agendaBtn').setAttribute('aria-pressed', agendaOpen); renderAgenda(); };
@@ -2190,6 +2432,7 @@ delete state._arrange;
 render();
 if (firstRun) { autoArrange(true); requestAnimationFrame(fitView); }
 else cleanFiles(); // only when a saved map loaded, so a fallback example map never clears your files
+if (mainView === 'timeline') setMainView('timeline'); // reopen where you left off
 
 /* ---------- Installable app (only when served from a website, not when opened as a file) ---------- */
 if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
