@@ -222,7 +222,17 @@ button.pill:hover { color: var(--text); }
   font-size: 11px; line-height: 16px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.2);
 }
-.tl-b.sum { top: 12px; height: 10px; border-radius: 3px; padding: 0; opacity: .55; }
+.tl-b.sum { top: 12px; height: 10px; border-radius: 3px; padding: 0; opacity: .55; cursor: default; }
+.tl-b:not(.sum) { cursor: grab; touch-action: none; }
+.tl-b .h { position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+.tl-b .h.l { left: 0; }
+.tl-b .h.r { right: 0; }
+.tl-b:hover .h { background: rgba(255,255,255,.28); }
+.tl-b.dragging { cursor: grabbing; z-index: 2; opacity: 1; overflow: visible; box-shadow: 0 0 0 2px var(--text), 0 4px 12px rgba(0,0,0,.3); }
+.tl-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px;
+  background: var(--text); color: var(--bg); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; text-decoration: none;
+}
 .tl-row.group .tl-b:not(.sum) { top: 9px; }
 .tl-b.done { opacity: .4; text-decoration: line-through; }
 .tl-b.late { background: var(--bad); box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 30%, transparent); }
@@ -619,7 +629,7 @@ body.dropping::after {
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
       <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> high / medium / low priority · <kbd>0</kbd> none<br>
-      <kbd>R</kbd> arrange the map · <kbd>T</kbd> timeline · <kbd>Esc</kbd> deselect<br>
+      <kbd>R</kbd> arrange the map · <kbd>T</kbd> timeline (drag bars to change dates) · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
     </div>
   </aside>
@@ -1106,7 +1116,8 @@ function renderTimeline() {
     const when = shortDate(span[0]) + (span[1] !== span[0] ? ' – ' + shortDate(span[1]) : '');
     const tip = `${n.title || 'Untitled'} · ${sum ? 'tasks run ' : ''}${when}${n.done ? ' · done' : late ? ' · overdue' : ''}`;
     return `<div class="tl-b${sum ? ' sum' : ''}${n.done ? ' done' : ''}${late && !sum ? ' late' : ''}" data-id="${n.id}" ` +
-      `style="left:${x(span[0])}px;width:${w}px;--c:${colorOf(n)}" title="${esc(tip)}">${!sum && w >= 70 ? esc(n.title) : ''}</div>`;
+      `style="left:${x(span[0])}px;width:${w}px;--c:${colorOf(n)}" title="${esc(tip)}${sum ? '' : ' · drag to move, drag an end to change it'}">` +
+      `${!sum && w >= 70 ? esc(n.title) : ''}${!sum && w >= 20 ? '<span class="h l"></span><span class="h r"></span>' : ''}</div>`;
   };
   const row = (n, d, span, group, sum) => {
     const late = !n.done && n.dueDate && n.dueDate < today;
@@ -2076,6 +2087,64 @@ $('#tlScale').addEventListener('click', e => {
   if (sel && $('#tlScroll').querySelector(`.tl-b[data-id="${sel}"]`)) tlScrollTo(sel); else tlScrollTo();
 });
 $('#tlToday').onclick = () => tlScrollTo();
+// Drag a bar to move its dates; drag either end to change just the start or the due date. Snaps to whole days.
+let tlDrag = null;
+$('#tlScroll').addEventListener('pointerdown', e => {
+  const b = e.target.closest('.tl-b:not(.sum)'), n = b && byId.get(b.dataset.id);
+  if (!n || e.button !== 0) return;
+  const span = tlSpan(n);
+  if (!span) return;
+  e.preventDefault();
+  b.setPointerCapture(e.pointerId);
+  const mode = e.target.closest('.h.l') ? 'start' : e.target.closest('.h.r') ? 'end' : 'move';
+  tlDrag = { b, n, span, mode, x0: e.clientX, left: parseFloat(b.style.left), width: parseFloat(b.style.width), dd: 0 };
+});
+function tlNewSpan(d) {
+  const [a, z] = d.span;
+  if (d.mode === 'move') return [shiftDate(a, d.dd), shiftDate(z, d.dd)];
+  if (d.mode === 'start') { const na = shiftDate(a, d.dd); return [na > z ? z : na, z]; }
+  const nz = shiftDate(z, d.dd);
+  return [a, nz < a ? a : nz];
+}
+$('#tlScroll').addEventListener('pointermove', e => {
+  const d = tlDrag;
+  if (!d) return;
+  const dw = TL_DAY[tlScale], dd = Math.round((e.clientX - d.x0) / dw);
+  if (dd === d.dd && d.b.classList.contains('dragging')) return;
+  if (!dd && !d.b.classList.contains('dragging')) return; // still a click
+  d.dd = dd;
+  const [a, z] = tlNewSpan(d);
+  d.b.classList.add('dragging');
+  d.b.style.left = d.left + dayDiff(d.span[0], a) * dw + 'px';
+  d.b.style.width = (dayDiff(a, z) + 1) * dw + 'px';
+  let tip = d.b.querySelector('.tl-tip');
+  if (!tip) { tip = document.createElement('span'); tip.className = 'tl-tip'; d.b.appendChild(tip); }
+  tip.textContent = shortDate(a) + (a !== z ? ' – ' + shortDate(z) : '');
+});
+function tlDrop(e) {
+  const d = tlDrag;
+  if (!d) return;
+  tlDrag = null;
+  if (!d.b.classList.contains('dragging')) return;
+  d.b.classList.remove('dragging');
+  const [a, z] = tlNewSpan(d), n = d.n;
+  if (e.type === 'pointercancel' || (a === d.span[0] && z === d.span[1])) { renderTimeline(); return; }
+  snapshot();
+  if (d.mode === 'move') {
+    // move whichever dates the item has
+    if (n.startDate) n.startDate = shiftDate(n.startDate, d.dd);
+    if (n.dueDate) n.dueDate = shiftDate(n.dueDate, d.dd);
+  } else {
+    // stretching a one-date bar gives it the other date too
+    n.startDate = a;
+    n.dueDate = z;
+  }
+  sel = n.id;
+  render();
+  toast(`${n.title || 'Untitled'}: ${shortDate(a)}${a !== z ? ' – ' + shortDate(z) : ''} · Ctrl+Z to undo`);
+}
+$('#tlScroll').addEventListener('pointerup', tlDrop);
+$('#tlScroll').addEventListener('pointercancel', tlDrop);
 // re-fit when the pane changes width (side panel opening, window resize)
 let tlWidth = 0;
 new ResizeObserver(() => {

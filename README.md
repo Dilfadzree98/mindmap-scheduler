@@ -20,7 +20,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 - Mind-map canvas: drag, zoom, auto-arrange, and fold branches
 - Projects, ideas and tasks, with progress bars
 - Start and due dates, overdue highlighting, and an agenda grouped by day
-- Timeline view (T): a bar from start to due date for every dated task, grouped by project, with a line for today
+- Timeline view (T): a bar from start to due date for every dated task, grouped by project, with a line for today. Drag a bar to move it, or drag its ends to change the dates
 - Completion dates, plus a remark when closing an item that still has open sub-tasks
 - Priority flags (High, Medium, Low) with keys 1, 2, 3, plus an agenda filter and "High first" sorting
 - Recurring tasks (daily, weekly, monthly): ticking one done adds the next one automatically
