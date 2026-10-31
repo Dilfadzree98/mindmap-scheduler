@@ -3097,6 +3097,11 @@ $('#rmNotify').onclick = async () => {
   saveRem();
   renderNotifyBtn();
   toast(rem.notify ? 'Notifications on. Keep the app open (minimised is fine) to get them' : 'Notifications weren\'t allowed');
+  if (!rem.notify) return;
+  // send one straight away, so it's clear they work
+  const { late, today } = dueItems();
+  if (late.length || today.length) notifyDue(late, today);
+  else try { new Notification('Mind Map Scheduler', { body: 'Notifications are on. You\'ll get one when something is due.', icon: 'icons/icon-192.png' }); } catch (e) { }
 };
 function notifyDue(late, today) {
   const list = [...late, ...today], names = list.slice(0, 3).map(n => n.title || 'Untitled').join(', ');

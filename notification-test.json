@@ -1,0 +1,49 @@
+{
+  "_howTo": [
+    "Test file for reminders and notifications. In the app click Import (or drag this file onto the map) and choose 'Add to my map'.",
+    "It has tasks that are overdue, due today (31 Oct 2026) and due tomorrow, so the reminders have something to show.",
+    "Delete the 'Notification test' project afterwards (select it, press Delete)."
+  ],
+  "version": 1,
+  "teams": [],
+  "nodes": [
+    {
+      "id": "nt",
+      "parentId": null,
+      "type": "project",
+      "title": "Notification test",
+      "notes": "Delete this project when you're done testing."
+    },
+    {
+      "id": "nt1",
+      "parentId": "nt",
+      "type": "task",
+      "title": "Overdue test task (3 days late)",
+      "priority": "high",
+      "startDate": "2026-10-25",
+      "dueDate": "2026-10-28"
+    },
+    {
+      "id": "nt2",
+      "parentId": "nt",
+      "type": "task",
+      "title": "Overdue test task (yesterday)",
+      "dueDate": "2026-10-30"
+    },
+    {
+      "id": "nt3",
+      "parentId": "nt",
+      "type": "task",
+      "title": "Due today test task",
+      "priority": "medium",
+      "dueDate": "2026-10-31"
+    },
+    {
+      "id": "nt4",
+      "parentId": "nt",
+      "type": "task",
+      "title": "Due tomorrow test task (shows after midnight)",
+      "dueDate": "2026-11-01"
+    }
+  ]
+}
