@@ -2100,7 +2100,7 @@ $('#agenda').addEventListener('click', e => {
     return;
   }
   const pj = e.target.closest('.pj-row');
-  if (pj) { focusNode(pj.dataset.id); return; }
+  if (pj) { openFromSidebar(pj.dataset.id); return; }
   const more = e.target.closest('.ag-more');
   if (more) { agShowAll.add(more.dataset.key); renderAgenda(); return; }
   if (e.target.closest('.ag-sort')) {
@@ -2119,8 +2119,17 @@ $('#agenda').addEventListener('click', e => {
   const it = e.target.closest('.ag-row');
   if (!it) return;
   if (e.target.closest('.ag-chk')) toggleDone(it.dataset.id);
-  else focusNode(it.dataset.id);
+  else openFromSidebar(it.dataset.id);
 });
+// Click shows the item (on the timeline, if that's open); a second click on the same item soon after
+// (a double-click) goes to it on the mind map. Timed by hand, because the sidebar redraws between the clicks.
+let sideLast = { id: null, at: 0 };
+function openFromSidebar(id) {
+  const now = Date.now(), twice = sideLast.id === id && now - sideLast.at < 450;
+  sideLast = { id: twice ? null : id, at: now };
+  if (twice && mainView === 'timeline') setMainView('map');
+  focusNode(id);
+}
 $('#agenda').addEventListener('change', e => {
   if (e.target.id === 'agPerson') agPerson = e.target.value;
   else if (e.target.id === 'agPrio') agPrio = e.target.value;
