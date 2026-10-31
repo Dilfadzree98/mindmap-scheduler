@@ -378,6 +378,11 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
   border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; cursor: pointer;
 }
 .ag-sort[aria-pressed=true] { color: var(--accent); border-color: currentColor; }
+.ag-more {
+  display: block; width: 100%; margin: 4px 0 6px; padding: 6px; border: 1px dashed var(--border); border-radius: 8px;
+  background: none; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.ag-more:hover { color: var(--accent); border-color: currentColor; }
 
 .overlay { position: fixed; inset: 0; z-index: 40; background: rgba(10, 14, 24, .5); display: grid; place-items: center; padding: 16px; }
 .overlay[hidden] { display: none; }
@@ -754,7 +759,16 @@ function stepDate(s, r) {
   d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
   return fmtDate(d);
 }
-const shortDate = s => parseDate(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// date formatters are made once: building one per call (toLocaleDateString) is slow on big maps
+const FMT = {
+  short: new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }),
+  weekday: new Intl.DateTimeFormat(undefined, { weekday: 'short' }),
+  full: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+  month: new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' }),
+  monthLong: new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' })
+};
+const shortDate = s => FMT.short.format(parseDate(s));
+const weekday = s => FMT.weekday.format(parseDate(s));
 
 function index() {
   byId = new Map(state.nodes.map(n => [n.id, n]));
@@ -806,7 +820,7 @@ function dueInfo(n) {
   if (d === 0) txt = 'Today';
   else if (d === 1) txt = 'Tomorrow';
   else if (d < 0 && !n.done) txt = d === -1 ? '1 day overdue' : `${-d} days overdue`;
-  else if (d > 1 && d < 7) txt = parseDate(n.dueDate).toLocaleDateString(undefined, { weekday: 'short' });
+  else if (d > 1 && d < 7) txt = weekday(n.dueDate);
   else txt = shortDate(n.dueDate);
   return { cls, txt, d };
 }
@@ -986,15 +1000,10 @@ function load() {
 
 /* ---------- Rendering ---------- */
 function cardFor(n, memo, q) {
-  const el = document.createElement('div');
   const ch = childrenOf(n.id);
-  el.className = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '') +
+  let cls = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '') +
     (n.expanded && (n.notes.trim() || n.attachments.length) ? ' expanded' : '');
-  if (q) el.classList.add(matches(n, q) ? 'match' : 'dim');
-  el.dataset.id = n.id;
-  el.style.left = n.x + 'px';
-  el.style.top = n.y + 'px';
-  el.style.setProperty('--c', colorOf(n));
+  if (q) cls += matches(n, q) ? ' match' : ' dim';
   const typeIcon = n.type === 'task' ? '' : `<span class="ic">${icon(TYPES[n.type][0])}</span>`;
   let html = `<div class="row"><button class="chk" title="Mark done (Space)" aria-label="Toggle done">${n.done ? icon('check') : ''}</button>` +
     `<div class="tw">${typeIcon}<span class="title">${n.title ? esc(n.title) : '<i class="ph">Untitled</i>'}</span></div></div>`;
@@ -1003,7 +1012,7 @@ function cardFor(n, memo, q) {
   if (n.done && n.doneAt) {
     const when = new Date(n.doneAt), day = fmtDate(when);
     const late = n.dueDate && day > n.dueDate ? daysUntil(day) - daysUntil(n.dueDate) : 0;
-    const full = when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    const full = FMT.full.format(when);
     meta.push(`<span class="pill done-at${late ? ' late' : ''}" title="Completed ${full}${late ? ` — ${late} day${late > 1 ? 's' : ''} after the due date` : ''}">${icon('check')}Done ${shortDate(day)}</span>`);
   }
   const di = n.done && n.doneAt ? null : dueInfo(n);
@@ -1042,8 +1051,7 @@ function cardFor(n, memo, q) {
       '</div>';
   }
   html += '<button class="add" title="Add sub-task (Tab)">+</button>';
-  el.innerHTML = html;
-  return el;
+  return { cls, html };
 }
 /* ---------- Timeline ---------- */
 // A second view over the map: every dated item as a bar from its start to its due date, grouped by project.
@@ -1110,7 +1118,7 @@ function renderTimeline() {
   for (let i = 0; i < days; i++) {
     const d = parseDate(shiftDate(start, i)), ds = fmtDate(d), we = d.getDay() === 0 || d.getDay() === 6;
     if (i === 0 || d.getDate() === 1)
-      months += `<div class="tl-m" style="left:${i * dw}px">${d.toLocaleDateString(undefined, { month: tlScale === 'month' ? 'short' : 'long', year: 'numeric' })}</div>`;
+      months += `<div class="tl-m" style="left:${i * dw}px">${FMT[tlScale === 'month' ? 'month' : 'monthLong'].format(d)}</div>`;
     if (tlScale === 'day')
       ticks += `<div class="tl-d${we ? ' we' : ''}${ds === today ? ' today' : ''}" style="left:${i * dw}px;width:${dw}px">${'SMTWTFS'[d.getDay()]} ${d.getDate()}</div>`;
     else if (tlScale === 'week' && d.getDay() === 1)
@@ -1178,15 +1186,42 @@ function setMainView(v) {
     if (sel && $('#tlScroll').querySelector(`.tl-b[data-id="${sel}"]`)) tlReveal(sel); else tlScrollTo();
   }
 }
+// Cards are kept between renders: a card whose HTML and classes are unchanged keeps its element and its
+// measured size, so a small edit on a big map only rebuilds (and re-measures) the cards it touched.
+const cards = new Map(); // id -> { el, html, cls }
+const dirtyCard = id => { const c = cards.get(id); if (c) c.html = null; };
 function render() {
   index();
   const memo = new Map(), layer = $('#nodes'), q = query.trim().toLowerCase();
-  layer.innerHTML = '';
-  for (const n of state.nodes) if (isVisible(n)) layer.appendChild(cardFor(n, memo, q));
+  const old = sizes, changed = [], shown = new Set();
   sizes = new Map();
-  for (const el of layer.children) sizes.set(el.dataset.id, { w: el.offsetWidth, h: el.offsetHeight });
+  for (const n of state.nodes) {
+    if (!isVisible(n)) continue;
+    shown.add(n.id);
+    const { cls, html } = cardFor(n, memo, q);
+    let c = cards.get(n.id);
+    if (!c) {
+      c = { el: document.createElement('div') };
+      c.el.dataset.id = n.id;
+      cards.set(n.id, c);
+    }
+    if (c.html !== html) { c.el.innerHTML = html; changed.push(c); }
+    else if (c.cls !== cls || !old.has(n.id)) changed.push(c);
+    c.html = html;
+    c.cls = cls;
+    // only touch what changed, so the browser doesn't redo the layout of every card
+    if (c.el.className !== cls) c.el.className = cls; // also clears one-off effects (flash, just-done), like a fresh card
+    if (c.x !== n.x) c.el.style.left = (c.x = n.x) + 'px';
+    if (c.y !== n.y) c.el.style.top = (c.y = n.y) + 'px';
+    const col = colorOf(n);
+    if (c.col !== col) c.el.style.setProperty('--c', c.col = col);
+    if (c.el.parentNode !== layer) layer.appendChild(c.el);
+    if (old.has(n.id)) sizes.set(n.id, old.get(n.id));
+  }
+  for (const [id, c] of cards) if (!shown.has(id)) { c.el.remove(); cards.delete(id); }
+  for (const c of changed) sizes.set(c.el.dataset.id, { w: c.el.offsetWidth, h: c.el.offsetHeight });
   // thumbnails have a fixed size, so loading them later doesn't change the measured card height
-  for (const img of layer.querySelectorAll('img[data-fid]'))
+  for (const c of changed) for (const img of c.el.querySelectorAll('img[data-fid]'))
     fileUrl(img.dataset.fid).then(u => { if (u) img.src = u; else img.closest('.xfile').classList.add('missing'); });
   drawEdges();
   renderStats(memo);
@@ -1255,6 +1290,10 @@ function projectsHtml() {
     || '<p class="empty">No projects yet. Click <b>Project</b> in the top bar to start one.</p>';
 }
 const agCollapsed = new Set(['done']);
+// long groups show their first rows; the rest are a click away (keeps the sidebar quick on big maps)
+const AG_LIMIT = 40, agShowAll = new Set();
+const agRows = (key, rows) => agShowAll.has(key) || rows.length <= AG_LIMIT ? rows.join('')
+  : rows.slice(0, AG_LIMIT).join('') + `<button class="ag-more" data-key="${key}">Show ${rows.length - AG_LIMIT} more</button>`;
 let agPrio = ''; // '' = any, 'high' / 'medium' / 'low', or '-' = no priority
 const SORT_KEY = 'mindmap-scheduler-prio-sort';
 let agPrioSort = false;
@@ -1276,7 +1315,7 @@ function agDate(n) {
   if (!n.dueDate) return '';
   const d = daysUntil(n.dueDate);
   const label = d === 0 ? 'Today' : d === 1 ? 'Tomorrow'
-    : d > 1 && d < 7 ? parseDate(n.dueDate).toLocaleDateString(undefined, { weekday: 'short' }) : shortDate(n.dueDate);
+    : d > 1 && d < 7 ? weekday(n.dueDate) : shortDate(n.dueDate);
   return `<div class="ag-date ${d < 0 ? 'bad' : d <= 2 ? 'warn' : ''}">${label}${d < 0 ? `<small>${-d}d late</small>` : ''}</div>`;
 }
 function renderAgenda() {
@@ -1304,10 +1343,14 @@ function renderAgenda() {
   g.done = g.done.sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)).slice(0, 10);
   // within a group, sub-tasks follow their parent (when it's in the same group) and are indented under it
   const nest = list => {
-    const inGroup = new Set(list.map(n => n.id)), out = [];
-    const up = n => ancestors(n).find(a => inGroup.has(a.id));
-    const add = (n, d) => { out.push([n, d]); for (const k of list) if (up(k) === n) add(k, d + 1); };
-    for (const n of list) if (!up(n)) add(n, 0);
+    const inGroup = new Set(list.map(n => n.id)), under = new Map(), top = [], out = [];
+    for (const n of list) {
+      const up = ancestors(n).find(a => inGroup.has(a.id));
+      if (!up) top.push(n);
+      else { if (!under.has(up.id)) under.set(up.id, []); under.get(up.id).push(n); }
+    }
+    const add = (n, d) => { out.push([n, d]); for (const k of under.get(n.id) || []) add(k, d + 1); };
+    for (const n of top) add(n, 0);
     return out;
   };
   const row = ([n, d]) => {
@@ -1326,7 +1369,7 @@ function renderAgenda() {
   const sec = (key, label) => !g[key].length ? '' :
     `<section class="ag-sec ${key}${agCollapsed.has(key) ? ' collapsed' : ''}" data-key="${key}">` +
     `<button class="ag-sh">${icon('chevronDown')}<span>${label}</span><span class="ag-cnt">${g[key].length}</span></button>` +
-    `<div class="ag-list">${nest(g[key]).map(row).join('')}</div></section>`;
+    `<div class="ag-list">${agRows(key, nest(g[key]).map(row))}</div></section>`;
   const open = state.nodes.filter(n => !n.done && !childrenOf(n.id).length && wanted(n)).length;
   const body = sec('overdue', 'Overdue') + sec('today', 'Today') + sec('week', 'Next 7 days') + sec('later', 'Later') +
     sec('nodate', 'Unscheduled') + sec('done', 'Recently completed');
@@ -1866,6 +1909,7 @@ function startRename(id) {
     applyView();
   }
   const t = card.querySelector('.title'), old = n.title;
+  dirtyCard(id); // its title element is edited in place
   let finished = false;
   t.textContent = n.title;
   t.contentEditable = 'true';
@@ -2019,6 +2063,8 @@ $('#agenda').addEventListener('click', e => {
   }
   const pj = e.target.closest('.pj-row');
   if (pj) { focusNode(pj.dataset.id); return; }
+  const more = e.target.closest('.ag-more');
+  if (more) { agShowAll.add(more.dataset.key); renderAgenda(); return; }
   if (e.target.closest('.ag-sort')) {
     agPrioSort = !agPrioSort;
     try { localStorage.setItem(SORT_KEY, agPrioSort ? '1' : ''); } catch (err) { }
