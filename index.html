@@ -2114,7 +2114,12 @@ $('#tlScroll').addEventListener('pointerdown', e => {
   e.preventDefault();
   b.setPointerCapture(e.pointerId);
   const mode = e.target.closest('.h.l') ? 'start' : e.target.closest('.h.r') ? 'end' : 'move';
-  tlDrag = { b, n, span, mode, x0: e.clientX, left: parseFloat(b.style.left), width: parseFloat(b.style.width), dd: 0 };
+  // moving a bar carries its unfinished sub-tasks along (finished ones keep their dates as a record)
+  const kids = mode !== 'move' ? [] : descendants(n.id).filter(k => !k.done && tlSpan(k)).map(k => {
+    const el = $('#tlScroll').querySelector(`.tl-b[data-id="${k.id}"]`);
+    return { k, el, left: el && parseFloat(el.style.left) };
+  });
+  tlDrag = { b, n, span, mode, kids, x0: e.clientX, left: parseFloat(b.style.left), width: parseFloat(b.style.width), dd: 0 };
 });
 function tlNewSpan(d) {
   const [a, z] = d.span;
@@ -2134,6 +2139,7 @@ $('#tlScroll').addEventListener('pointermove', e => {
   d.b.classList.add('dragging');
   d.b.style.left = d.left + dayDiff(d.span[0], a) * dw + 'px';
   d.b.style.width = (dayDiff(a, z) + 1) * dw + 'px';
+  for (const c of d.kids) if (c.el) c.el.style.left = c.left + dd * dw + 'px';
   let tip = d.b.querySelector('.tl-tip');
   if (!tip) { tip = document.createElement('span'); tip.className = 'tl-tip'; d.b.appendChild(tip); }
   tip.textContent = shortDate(a) + (a !== z ? ' – ' + shortDate(z) : '');
@@ -2149,8 +2155,10 @@ function tlDrop(e) {
   snapshot();
   if (d.mode === 'move') {
     // move whichever dates the item has
-    if (n.startDate) n.startDate = shiftDate(n.startDate, d.dd);
-    if (n.dueDate) n.dueDate = shiftDate(n.dueDate, d.dd);
+    for (const x of [n, ...d.kids.map(c => c.k)]) {
+      if (x.startDate) x.startDate = shiftDate(x.startDate, d.dd);
+      if (x.dueDate) x.dueDate = shiftDate(x.dueDate, d.dd);
+    }
   } else {
     // stretching a one-date bar gives it the other date too
     n.startDate = a;
@@ -2158,7 +2166,9 @@ function tlDrop(e) {
   }
   sel = n.id;
   render();
-  toast(`${n.title || 'Untitled'}: ${shortDate(a)}${a !== z ? ' – ' + shortDate(z) : ''} · Ctrl+Z to undo`);
+  const moved = d.mode === 'move' ? d.kids.length : 0;
+  toast(`${n.title || 'Untitled'}: ${shortDate(a)}${a !== z ? ' – ' + shortDate(z) : ''}` +
+    `${moved ? ` · ${moved} sub-task${moved === 1 ? '' : 's'} moved too` : ''} · Ctrl+Z to undo`);
 }
 $('#tlScroll').addEventListener('pointerup', tlDrop);
 $('#tlScroll').addEventListener('pointercancel', tlDrop);
