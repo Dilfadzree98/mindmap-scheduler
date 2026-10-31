@@ -455,12 +455,29 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 
 /* shown while a file is dragged over the page */
 body.dropping #viewport { outline: 3px dashed var(--accent); outline-offset: -6px; }
-body.dropping::after {
+body.dropping::after, body.reparent::after {
   content: attr(data-drop); position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 60; pointer-events: none;
   padding: 10px 18px; border-radius: 99px; background: var(--accent); color: #fff; font-weight: 600; box-shadow: var(--shadow);
   max-width: calc(100vw - 32px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .node.drop-target { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+
+/* ---------- Move dialog ---------- */
+.mv-search { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); margin: 2px 0 8px; }
+.mv-list { max-height: min(360px, 55vh); overflow-y: auto; margin: 0 -8px; }
+.mv-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: none; background: none; color: var(--text);
+  padding: 6px 8px 6px calc(8px + var(--ind, 0px)); border-radius: 8px; font-size: 13.5px; cursor: pointer;
+}
+.mv-row:hover, .mv-row:focus-visible { background: var(--hover); outline: none; }
+.mv-row .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.mv-row .i { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.mv-row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-row .path { color: var(--muted); font-size: 11.5px; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-row.done .t { text-decoration: line-through; color: var(--muted); }
+.mv-row.top { font-weight: 600; }
+.mv-row[disabled] { cursor: default; opacity: .55; background: none; }
+.mv-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
 
 /* ---------- Attachments ---------- */
 .files { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 8px; }
@@ -668,6 +685,7 @@ body.dropping::after {
     </div>
     <div class="btns">
       <button class="btn" id="dAdd"><span data-i="plus"></span>Sub-task</button>
+      <button class="btn" id="dMove" title="Move it, with its sub-tasks, under another item (M)"><span data-i="move"></span>Move</button>
       <button class="btn" id="dExport" title="Download only this item and everything under it"><span data-i="download"></span>Export</button>
       <button class="btn" id="dReport" title="A readable report of this item: Excel or PDF"><span data-i="file"></span>Report</button>
       <button class="btn danger" id="dDel"><span data-i="trash"></span>Delete</button>
@@ -676,6 +694,7 @@ body.dropping::after {
       <kbd>Tab</kbd> add sub-task · <kbd>Enter</kbd> add sibling<br>
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
+      <kbd>M</kbd> move under another item, or drag the card onto it<br>
       <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> high / medium / low priority · <kbd>0</kbd> none<br>
       <kbd>R</kbd> arrange the map · <kbd>T</kbd> timeline (drag bars to change dates) · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
@@ -699,6 +718,14 @@ body.dropping::after {
       <button class="btn primary" id="newTeamBtn"><span data-i="plus"></span>Create team</button>
     </div>
     <div id="teamList"></div>
+  </div>
+</div>
+<div id="moveDlg" class="overlay" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mvTitle">
+    <h3 id="mvTitle" class="dlg-h"><span id="mvName"></span><button class="iconbtn" id="mvClose" title="Close (Esc)" aria-label="Close"><span data-i="x"></span></button></h3>
+    <p>Pick where it should go. Its sub-tasks move with it.</p>
+    <input id="mvSearch" class="mv-search" placeholder="Search projects and tasks…" autocomplete="off">
+    <div id="mvList" class="mv-list"></div>
   </div>
 </div>
 <datalist id="allPeople"></datalist>
@@ -733,6 +760,7 @@ const vp = $('#viewport');
 const ICONS = {
   network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  move: '<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>',
   bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   task: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/>',
@@ -1936,6 +1964,91 @@ function deleteNode(id) {
   render();
   toast('Deleted — Ctrl+Z to undo');
 }
+// Move an item, with everything under it, under another item, or out to be its own project (pid null).
+const canMoveUnder = (n, pid) => pid !== n.id && !descendants(n.id).some(d => d.id === pid);
+function moveUnder(id, pid, snap = true) {
+  const n = byId.get(id), p = pid ? byId.get(pid) : null;
+  if (!n || (pid && !p) || n.parentId === (pid || null) || (p && !canMoveUnder(n, pid))) return false;
+  if (snap) snapshot();
+  const look = colorOf(n), sub = descendants(id);
+  if (p) {
+    if (!n.parentId) n.color = null; // a project's own colour gives way to its new parent's
+    p.collapsed = false;
+    if (hideDone && p.done) setHideDone(false);
+    // start it just below its new siblings, so arranging lists it last
+    const sibs = childrenOf(pid);
+    const x = p.x + (sizes.get(pid)?.w || 190) + 70, y = sibs.length ? Math.max(...sibs.map(k => k.y)) + 1 : p.y;
+    const dx = x - n.x, dy = y - n.y;
+    for (const m of [n, ...sub]) { m.x += dx; m.y += dy; }
+  } else {
+    n.color = look; // keeps the colour it had
+    n.repeat = null; // projects don't repeat
+    const dy = Math.max(...state.nodes.filter(r => !r.parentId).map(r => r.y)) + 1 - n.y;
+    for (const m of [n, ...sub]) m.y += dy;
+  }
+  n.parentId = pid || null;
+  sel = id;
+  render();
+  autoArrange(true);
+  toast((p ? `Moved "${n.title || 'Untitled'}" under "${p.title || 'Untitled'}"` : `"${n.title || 'Untitled'}" is now its own project`) +
+    `${sub.length ? ` with ${sub.length} sub-item${sub.length === 1 ? '' : 's'}` : ''} · Ctrl+Z to undo`);
+  return true;
+}
+let moveId = null;
+function openMove(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  moveId = id;
+  $('#mvName').textContent = `Move "${n.title || 'Untitled'}" to…`;
+  $('#mvSearch').value = '';
+  renderMoveList();
+  $('#moveDlg').hidden = false;
+  $('#mvSearch').focus();
+}
+function closeMove() { $('#moveDlg').hidden = true; moveId = null; }
+function renderMoveList() {
+  const n = byId.get(moveId);
+  if (!n) return;
+  const q = $('#mvSearch').value.trim().toLowerCase(), out = [];
+  const byY = list => [...list].sort((a, b) => a.y - b.y);
+  const walk = (m, d) => {
+    if (!canMoveUnder(n, m.id)) return; // not itself, nor anything under it
+    if (!q || m.title.toLowerCase().includes(q)) out.push([m, d]);
+    for (const k of byY(childrenOf(m.id))) walk(k, d + 1);
+  };
+  for (const r of byY(state.nodes.filter(m => !m.parentId))) walk(r, 0);
+  let html = n.parentId && (!q || 'own project'.includes(q))
+    ? `<button class="mv-row top" data-id="">${icon('folder')}<span class="t">Make it its own project</span></button>` : '';
+  html += out.map(([m, d]) => {
+    const here = m.id === n.parentId, path = q ? ancestors(m).reverse().map(a => a.title).join(' › ') : '';
+    return `<button class="mv-row${m.done ? ' done' : ''}" data-id="${m.id}" style="--c:${colorOf(m)};--ind:${q ? 0 : d * 18}px"${here ? ' disabled' : ''}>` +
+      `<span class="dot"></span><span class="t">${esc(m.title || 'Untitled')}${here ? ' (here now)' : ''}</span>` +
+      `${path ? `<span class="path">${esc(path)}</span>` : ''}</button>`;
+  }).join('');
+  $('#mvList').innerHTML = html || '<div class="mv-empty">Nothing matches</div>';
+}
+$('#mvSearch').addEventListener('input', renderMoveList);
+$('#mvSearch').addEventListener('keydown', e => {
+  const first = $('#mvList .mv-row:not([disabled])');
+  if (e.key === 'Enter' && first) { e.preventDefault(); first.click(); }
+  else if (e.key === 'ArrowDown' && first) { e.preventDefault(); first.focus(); }
+});
+$('#mvList').addEventListener('keydown', e => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const rows = [...$('#mvList').querySelectorAll('.mv-row:not([disabled])')], i = rows.indexOf(document.activeElement);
+  if (e.key === 'ArrowUp' && i <= 0) $('#mvSearch').focus();
+  else rows[Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1))]?.focus();
+});
+$('#mvList').addEventListener('click', e => {
+  const b = e.target.closest('.mv-row');
+  if (!b || b.disabled) return;
+  const id = moveId;
+  closeMove();
+  if (moveUnder(id, b.dataset.id || null)) focusNode(id);
+});
+$('#mvClose').onclick = closeMove;
+$('#moveDlg').addEventListener('pointerdown', e => { if (e.target.id === 'moveDlg') closeMove(); });
 function startRename(id) {
   const card = cardEl(id), n = byId.get(id);
   if (!card || !n) return;
@@ -2053,6 +2166,14 @@ window.addEventListener('pointermove', e => {
       if (g.el) { g.el.style.left = g.n.x + 'px'; g.el.style.top = g.n.y + 'px'; }
     }
     drawEdges();
+    // over another card: dropping here moves it under that card
+    const n = byId.get(drag.id), over = document.elementsFromPoint(e.clientX, e.clientY)
+      .map(el => el.closest?.('.node')).find(el => el && !drag.group.some(g => g.n.id === el.dataset.id));
+    const t = over && byId.get(over.dataset.id);
+    drag.target = t && t.id !== n.parentId && canMoveUnder(n, t.id) ? t.id : null;
+    setDropCard(drag.target);
+    document.body.classList.toggle('reparent', !!drag.target);
+    if (t) document.body.dataset.drop = `Drop to move under "${t.title || 'Untitled'}"`;
   } else {
     state.view.panX = drag.pan.x + dx;
     state.view.panY = drag.pan.y + dy;
@@ -2064,8 +2185,9 @@ window.addEventListener('pointerup', () => {
   const d = drag;
   drag = null;
   vp.classList.remove('panning');
+  if (d.target) { setDropCard(null); document.body.classList.remove('reparent'); }
   if (!d.moved) select(d.mode === 'node' ? d.id : null);
-  else save();
+  else if (!d.target || !moveUnder(d.id, d.target, false)) save(); // the drag already took the undo snapshot
 });
 vp.addEventListener('wheel', e => {
   e.preventDefault();
@@ -2153,6 +2275,7 @@ document.addEventListener('keydown', e => {
   if (!$('#viewer').hidden) { if (e.key === 'Escape') $('#viewer').hidden = true; return; }
   if (!$('#modal').hidden) { if (e.key === 'Escape') closeRemark(false); return; }
   if (!$('#choice').hidden) { if (e.key === 'Escape') choiceCancel?.(); return; }
+  if (!$('#moveDlg').hidden) { if (e.key === 'Escape') closeMove(); return; }
   if (!$('#teamsDlg').hidden) {
     if (e.key === 'Escape') closeTeams();
     else if ((e.ctrlKey || e.metaKey) && !['INPUT', 'TEXTAREA'].includes(t.tagName)) {
@@ -2175,7 +2298,7 @@ document.addEventListener('keydown', e => {
   if (!sel || !byId.get(sel)) return;
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
-    e: () => toggleExpand(sel), E: () => toggleExpand(sel),
+    e: () => toggleExpand(sel), E: () => toggleExpand(sel), m: () => openMove(sel), M: () => openMove(sel),
     1: () => togglePriority('high'), 2: () => togglePriority('medium'), 3: () => togglePriority('low'), 0: () => togglePriority(null),
     Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
   };
@@ -2786,6 +2909,7 @@ $('#fTitle').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.
 $('#dAdd').onclick = () => sel && addChild(sel);
 $('#dExport').onclick = () => sel && exportBranch(sel);
 $('#dDel').onclick = () => sel && deleteNode(sel);
+$('#dMove').onclick = () => sel && openMove(sel);
 $('#dClose').onclick = () => select(null);
 $('#fAttachBtn').onclick = () => $('#fAttachInput').click();
 $('#fAttachInput').onchange = e => {
@@ -2809,7 +2933,7 @@ $('#fFiles').addEventListener('click', e => {
 document.addEventListener('paste', e => {
   const files = [...(e.clipboardData?.files || [])];
   if (!files.length) return; // ordinary text pastes behave as usual
-  if (!$('#modal').hidden || !$('#choice').hidden || !$('#teamsDlg').hidden) return;
+  if (!$('#modal').hidden || !$('#choice').hidden || !$('#teamsDlg').hidden || !$('#moveDlg').hidden) return;
   e.preventDefault();
   const n = sel && byId.get(sel);
   if (!n) { toast('Select a task first, then paste to attach'); return; }

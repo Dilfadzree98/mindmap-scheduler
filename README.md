@@ -20,6 +20,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 
 - Mind-map canvas: drag, zoom, auto-arrange, and fold branches
 - Projects, ideas and tasks, with progress bars
+- Move a task (with its sub-tasks) to another parent: drag its card onto the new parent, or press M / click **Move** and pick from a searchable list
 - Start and due dates, overdue highlighting, and an agenda grouped by day
 - Timeline view (T): a bar from start to due date for every dated task, grouped by project, with a line for today. Drag a bar to move it, or drag its ends to change the dates
 - Completion dates, plus a remark when closing an item that still has open sub-tasks
