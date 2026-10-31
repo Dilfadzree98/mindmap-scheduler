@@ -7,6 +7,7 @@
     "Dates are written YYYY-MM-DD, e.g. 2026-11-30. Use null for no date.",
     "'assignee' is one person's name. 'assigneeTeam' is a team id from 'teams' (use one or the other, or neither).",
     "'priority' is 'high', 'medium' or 'low'. Leave it out for no priority.",
+    "'repeat' is 'daily', 'weekly' or 'monthly' (tasks only). When it's ticked done, the next one is created.",
     "'teamIds' (on projects and ideas) lists the team ids working on it. 'members' lists extra people by name.",
     "You can leave out any field you don't need. Positions are worked out by the app.",
     "Keep the commas and quotes exactly like the examples: a missing comma makes the file invalid.",
@@ -50,8 +51,9 @@
       "id": "t2",
       "parentId": "p1",
       "type": "task",
-      "title": "Second task, done by the whole team",
+      "title": "Weekly team meeting (repeats)",
       "assigneeTeam": "team1",
+      "repeat": "weekly",
       "dueDate": "2026-11-13"
     },
     {

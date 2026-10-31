@@ -273,6 +273,11 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 .pill.remark { color: var(--accent); border-color: currentColor; }
 .pill.prio .i { fill: currentColor; }
+.pill.rep { color: var(--accent); }
+.ag-rep { flex: none; display: inline-flex; color: var(--muted); }
+.ag-rep .i { width: 12px; height: 12px; }
+#details .fhint { font-size: 12px; color: var(--muted); margin: -6px 0 10px; }
+#repeatWrap[hidden], #repeatHint[hidden] { display: none; }
 .pill.p-high { color: #fff; background: var(--bad); border-color: var(--bad); }
 .pill.p-medium { color: var(--warn); border-color: currentColor; }
 .pill.p-low { color: var(--muted); }
@@ -296,7 +301,7 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 .ag-flag.p-medium { color: var(--warn); }
 .ag-flag.p-low { color: var(--muted); }
 .ag-t { display: flex; align-items: center; gap: 5px; }
-.ag-t span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.ag-t span:not([class]) { overflow: hidden; text-overflow: ellipsis; }
 .ag-sort {
   flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg); color: var(--muted); font-size: 12px; cursor: pointer;
@@ -521,6 +526,15 @@ body.dropping::after {
       <label>Due<input type="date" id="fDue"></label>
     </div>
     <div class="warnmsg" id="fWarn" hidden>Due date is before the start date.</div>
+    <label id="repeatWrap">Repeat
+      <select id="fRepeat">
+        <option value="">Doesn't repeat</option>
+        <option value="daily">Every day</option>
+        <option value="weekly">Every week</option>
+        <option value="monthly">Every month</option>
+      </select>
+    </label>
+    <div class="fhint" id="repeatHint" hidden>When you tick it done, the next one is added automatically.</div>
     <label>Notes<textarea id="fNotes" rows="6" placeholder="Details, links, thoughts…"></textarea></label>
     <label>Remark<textarea id="fRemark" rows="2" placeholder="Needed to mark done while sub-tasks are still open"></textarea></label>
     <div class="flabel">Attachments
@@ -613,6 +627,7 @@ const ICONS = {
   notes: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/>',
   remark: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
+  repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   flag: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronRight: '<path d="m9 18 6-6-6-6"/>',
@@ -629,6 +644,8 @@ const TYPES = { project: ['folder', 'Project'], idea: ['bulb', 'Idea'], task: ['
 // priority: label and sort rank (higher first)
 const PRIO = { high: ['High', 3], medium: ['Medium', 2], low: ['Low', 1] };
 const prioRank = n => PRIO[n.priority]?.[1] || 0;
+// repeat: menu label and short label for the card
+const REPEAT = { daily: ['Every day', 'Daily'], weekly: ['Every week', 'Weekly'], monthly: ['Every month', 'Monthly'] };
 document.querySelectorAll('[data-i]').forEach(el => el.outerHTML = icon(el.dataset.i));
 
 let state, sel = null, hideDone = false, query = '', agendaOpen = true;
@@ -643,6 +660,17 @@ const addDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return 
 const isDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const parseDate = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
 const daysUntil = s => Math.round((parseDate(s) - parseDate(todayStr())) / 864e5);
+const shiftDate = (s, n) => { const d = parseDate(s); d.setDate(d.getDate() + n); return fmtDate(d); };
+// one repeat step on; a monthly task due on the 31st lands on the last day of shorter months
+function stepDate(s, r) {
+  if (r === 'daily') return shiftDate(s, 1);
+  if (r === 'weekly') return shiftDate(s, 7);
+  const d = parseDate(s), day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + 1);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return fmtDate(d);
+}
 const shortDate = s => parseDate(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
 function index() {
@@ -754,7 +782,7 @@ function makeNode(o) {
   return Object.assign({
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
     teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
-    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null
+    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null, repeat: null
   }, o);
 }
 let saveTimer;
@@ -828,7 +856,8 @@ function sanitize(d) {
       startDate: isDate(r.startDate) ? r.startDate : null,
       dueDate: isDate(r.dueDate) ? r.dueDate : null,
       createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null,
-      priority: PRIO[r.priority] ? r.priority : null
+      priority: PRIO[r.priority] ? r.priority : null,
+      repeat: REPEAT[r.repeat] ? r.repeat : null
     }));
   }
   const m = new Map(nodes.map(n => [n.id, n]));
@@ -897,6 +926,7 @@ function cardFor(n, memo, q) {
   const di = n.done && n.doneAt ? null : dueInfo(n);
   if (di) meta.push(`<span class="pill due ${di.cls}" title="${n.startDate ? 'Start ' + shortDate(n.startDate) + ' · ' : ''}Due ${shortDate(n.dueDate)}">${icon('calendar')}${di.txt}</span>`);
   else if (n.startDate) meta.push(`<span class="pill" title="Start date">${icon('clock')}${shortDate(n.startDate)}</span>`);
+  if (REPEAT[n.repeat]) meta.push(`<span class="pill rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}. When it's done, the next one is created.">${icon('repeat')}${REPEAT[n.repeat][1]}</span>`);
   const hasDetails = n.notes.trim() || n.attachments.length;
   if (hasDetails) meta.push(n.expanded
     ? `<button class="pill xp on" title="Hide details (E)">${icon('chevronUp')}Hide details</button>`
@@ -1062,7 +1092,8 @@ function renderAgenda() {
       `<button class="ag-chk" title="${n.done ? 'Mark not done' : 'Mark done'}" aria-label="Toggle done">${icon('check')}</button>` +
       `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">` +
       `${PRIO[n.priority] && !n.done ? `<span class="ag-flag p-${n.priority}" title="${PRIO[n.priority][0]} priority">${icon('flag')}</span>` : ''}` +
-      `<span>${esc(n.title || 'Untitled')}</span></div>` +
+      `<span>${esc(n.title || 'Untitled')}</span>` +
+      `${REPEAT[n.repeat] ? `<span class="ag-rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}">${icon('repeat')}</span>` : ''}</div>` +
       `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div></div>` +
       `${teamById(n.assigneeTeam) ? teamBadge(teamById(n.assigneeTeam)) : n.assignee ? avatar(n.assignee) : ''}${agDate(n)}</div>`;
   };
@@ -1168,6 +1199,10 @@ function renderPanel() {
   }
   setVal($('#fStart'), n.startDate || '');
   setVal($('#fDue'), n.dueDate || '');
+  // main projects and ideas don't repeat; tasks and sub-items can
+  $('#repeatWrap').hidden = !n.parentId;
+  setVal($('#fRepeat'), n.repeat || '');
+  $('#repeatHint').hidden = !n.parentId || !n.repeat;
   $('#fDone').checked = n.done;
   $('#doneWrap').hidden = !n.done;
   setVal($('#fDoneAt'), n.doneAt ? fmtDate(new Date(n.doneAt)) : '');
@@ -1309,12 +1344,39 @@ function toggleDone(id) {
 function setDone(n, v) {
   n.done = v;
   n.doneAt = v ? Date.now() : null;
+  const next = v && n.repeat ? repeatTask(n) : null;
   render();
+  if (next) {
+    autoArrange(true); // make room for the new copy
+    toast(`Next "${next.title}" due ${shortDate(next.dueDate)}`);
+  }
   if (n.done) {
     cardEl(n.id)?.classList.add('just-done');
     const root = rootOf(n), p = prog(root, new Map());
     if (p.total > 1 && p.done === p.total) toast(`Completed: ${root.title}`);
   }
+}
+// A finished repeating task stays done as a record; a fresh copy (with its sub-tasks) takes over the repeat,
+// due on the next date after today. Dates move together, so a start date keeps its gap to the due date.
+function repeatTask(n) {
+  const today = todayStr(), from = n.dueDate || n.startDate || today;
+  let due = stepDate(from, n.repeat);
+  while (due <= today) due = stepDate(due, n.repeat);
+  const shift = Math.round((parseDate(due) - parseDate(from)) / 864e5);
+  const move = s => s && shiftDate(s, shift);
+  const branch = [n, ...descendants(n.id)];
+  // start just below the finished one; the map is tidied right after
+  const dy = Math.max(...branch.map(x => x.y + (sizes.get(x.id)?.h || 44))) + 16 - n.y;
+  const ids = new Map(branch.map(x => [x.id, uid()]));
+  const copies = branch.map(x => makeNode({
+    ...x, id: ids.get(x.id), parentId: x === n ? n.parentId : ids.get(x.parentId), y: x.y + dy,
+    done: false, doneAt: null, remark: '', attachments: [], expanded: false, collapsed: false, createdAt: Date.now(),
+    teamIds: [...x.teamIds], members: [...x.members],
+    startDate: move(x.startDate), dueDate: x === n ? due : move(x.dueDate)
+  }));
+  n.repeat = null;
+  state.nodes.push(...copies);
+  return copies[0];
 }
 // small reusable choice dialog; resolves with the picked option's value, or null
 let choiceCancel = null;
@@ -2071,6 +2133,7 @@ const changeField = (el, apply) => el.addEventListener('change', () => {
 changeField($('#fType'), (n, v) => n.type = v);
 changeField($('#fStart'), (n, v) => n.startDate = v || null);
 changeField($('#fDue'), (n, v) => n.dueDate = v || null);
+changeField($('#fRepeat'), (n, v) => n.repeat = REPEAT[v] ? v : null);
 $('#fDone').addEventListener('change', () => sel && toggleDone(sel));
 // correct the completion date (e.g. ticked off a few days late); keeps the original time of day
 $('#fDoneAt').addEventListener('change', e => {
