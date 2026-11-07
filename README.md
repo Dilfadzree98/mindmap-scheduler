@@ -29,6 +29,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 - Reminders: a pop-up when you open the app lists what is due today or overdue (click the red "overdue" count to see it again), optional Windows notifications, and a nudge to back up after 7 days of changes
 - Teams and people: assign tasks to a person or a whole team, and filter the agenda by either
 - Attachments: paste screenshots with Ctrl+V, or drag files onto a card
+- Works on phones: compact toolbar with a More menu, panels that slide up from the bottom, pinch to zoom, and press-and-hold to add an idea or rename a card
 - Undo/redo, search, and light/dark theme
 
 It's a single HTML file with no build step: `index.html` is the whole app.

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mind Map Scheduler</title>
 <meta name="description" content="Plan projects and ideas as a mind map: tasks, due dates, teams, progress and attachments.">
 <meta name="theme-color" content="#5b6cff">
@@ -184,7 +184,7 @@ button.pill:hover { color: var(--text); }
 .tl-scale button:hover { color: var(--text); }
 .tl-scale button.on { background: var(--accent); color: #fff; }
 .tl-note { margin-left: auto; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tl-scroll { flex: 1; overflow: auto; position: relative; }
+.tl-scroll { flex: 1; overflow: auto; position: relative; touch-action: pan-x pan-y; }
 .tl-grid { position: relative; --lw: 260px; }
 .tl-head { position: sticky; top: 0; z-index: 3; display: flex; background: var(--panel); border-bottom: 1px solid var(--border); }
 .tl-corner {
@@ -564,6 +564,47 @@ body.dropping::after, body.reparent::after {
   #search { width: 130px; }
   .hint { display: none; }
 }
+/* ---------- Phones ---------- */
+#moreBtn, #moreMenu { display: none; }
+@media (max-width: 640px) {
+  header { gap: 6px; padding: 6px 8px; }
+  header .tb { display: contents; } /* all buttons share one row */
+  .brand { font-size: 0; gap: 0; margin: 0 2px 0 0; }
+  .brand .i { width: 22px; height: 22px; }
+  header .btn { font-size: 0; gap: 0; padding: 8px 9px; } /* icons only */
+  header .btn .i { width: 18px; height: 18px; }
+  #moreBtn { display: inline-flex; margin-left: auto; }
+  header .search { order: 5; flex: 1 1 150px; }
+  #search { width: 100%; padding-top: 8px; padding-bottom: 8px; font-size: 16px; }
+  .stats { order: 6; gap: 6px; font-size: 12.5px; }
+  .stats .bar { display: none; }
+  #moreMenu.open {
+    display: flex; flex-direction: column; position: fixed; top: 50px; right: 8px; z-index: 30; min-width: 200px; padding: 6px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow);
+  }
+  #moreMenu .btn { font-size: 15px; gap: 12px; justify-content: flex-start; border: none; padding: 11px 12px; }
+  #moreMenu .btn.icon::after { content: attr(aria-label); }
+  /* side panels slide up from the bottom as sheets */
+  #agenda, #details {
+    position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-height: 58vh; z-index: 20;
+    border-width: 1px 0 0; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .25);
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  #details { z-index: 21; }
+  #details input:not([type=checkbox]), #details select, #details textarea { font-size: 16px; } /* stops phones zooming in on focus */
+  #backupBar { padding: 6px 10px; }
+  .tl-top { flex-wrap: wrap; gap: 6px 10px; }
+}
+/* fingers need bigger targets than a mouse */
+@media (pointer: coarse) {
+  .chk { width: 24px; height: 24px; }
+  .add { width: 32px; height: 32px; right: -16px; font-size: 20px; }
+  .zoombar .btn { padding: 8px 13px; }
+  .tl-b .h { width: 14px; }
+  .iconbtn { padding: 6px; }
+  .ag-row, .pj-row, .mv-row, .rm-row { min-height: 44px; }
+  #details .keys { display: none; }
+}
 /* ---------- Printable report (PDF) ---------- */
 #report { display: none; }
 @media print {
@@ -623,10 +664,12 @@ body.dropping::after, body.reparent::after {
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <button class="btn primary" id="installBtn" title="Install as an app on this computer" hidden><span data-i="download"></span>Install app</button>
     <button class="btn icon" id="themeBtn" title="Theme" aria-label="Theme"></button>
+    <button class="btn icon" id="moreBtn" title="More" aria-label="More" aria-haspopup="true"><span data-i="more"></span></button>
   </div>
   <div class="stats" id="stats"></div>
 </header>
 
+<div id="moreMenu" role="menu"></div>
 <div id="backupBar" role="status" hidden>
   <span data-i="download"></span><span id="bbMsg"></span>
   <button class="btn primary" id="bbNow">Back up now</button>
@@ -805,6 +848,7 @@ const vp = $('#viewport');
 const ICONS = {
   network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  more: '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   move: '<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>',
   bulb: '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
@@ -1517,6 +1561,7 @@ function renderPanel() {
   const n = sel && byId.get(sel);
   $('#details').hidden = !n;
   if (!n) return;
+  if (PHONE.matches && agendaOpen) { agendaOpen = false; $('#agendaBtn').setAttribute('aria-pressed', false); $('#agenda').hidden = true; }
   $('#dType').innerHTML = icon(TYPES[n.type][0]) + TYPES[n.type][1];
   $('#dType').style.setProperty('--c', colorOf(n));
   setVal($('#fTitle'), n.title);
@@ -1644,12 +1689,14 @@ function focusNode(id) {
   if (wasHidden) autoArrange(true); // it was folded away or hidden: make room for it
   const s = sizes.get(id) || { w: 0, h: 0 }, r = vp.getBoundingClientRect(), v = state.view;
   v.panX = r.width / 2 - (n.x + s.w / 2) * v.zoom;
-  v.panY = r.height / 2 - (n.y + s.h / 2) * v.zoom;
+  v.panY = visibleH(r) / 2 - (n.y + s.h / 2) * v.zoom;
   applyView();
   cardEl(id)?.classList.add('flash');
   if (mainView === 'timeline') tlReveal(id);
 }
 const cardEl = id => document.querySelector(`.node[data-id="${id}"]`);
+// on a phone the details sheet covers the bottom of the map
+const visibleH = r => PHONE.matches && !$('#details').hidden ? Math.max(120, $('#details').getBoundingClientRect().top - r.top) : r.height;
 
 /* ---------- Actions ---------- */
 // Show/hide notes + attachments on the card, then re-tidy the map so the taller card
@@ -2176,14 +2223,41 @@ function setHideDone(v) {
 }
 
 /* ---------- Canvas interaction ---------- */
-let drag = null;
+let drag = null, pinch = null, pressTimer = null;
+const pts = new Map(); // fingers on the map, for pinch-zoom
+function pinchInfo() {
+  const [a, b] = [...pts.values()], r = vp.getBoundingClientRect();
+  return { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+}
+const TIP_KEY = 'mindmap-scheduler-touchtip';
+function touchTip() {
+  try { if (localStorage.getItem(TIP_KEY)) return; localStorage.setItem(TIP_KEY, '1'); } catch (e) { return; }
+  toast('Tip: pinch to zoom · hold the map to add an idea · hold a card to rename it');
+}
 vp.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    touchTip();
+    if (pts.size === 2) {
+      // a second finger turns the gesture into pinch-zoom
+      clearTimeout(pressTimer);
+      if (drag?.moved) save();
+      drag = null;
+      vp.classList.remove('panning');
+      setDropCard(null);
+      document.body.classList.remove('reparent');
+      const m = pinchInfo(), v = state.view;
+      pinch = { d: m.d, z: v.zoom, wx: (m.x - v.panX) / v.zoom, wy: (m.y - v.panY) / v.zoom };
+      return;
+    }
+    if (pts.size > 2) return;
+  }
   if (e.button !== 0 && e.button !== 1) return;
   if (e.target.closest('button, a, .zoombar') || e.target.isContentEditable) return;
   // clicking the map takes the cursor out of any side-panel field, so shortcuts work straight away
   if (isTyping(document.activeElement) && !document.activeElement.closest('.node')) document.activeElement.blur();
   const card = e.target.closest('.node');
-  drag = { sx: e.clientX, sy: e.clientY, moved: false };
+  drag = { sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId, touch: e.pointerType === 'touch' };
   if (card) {
     drag.mode = 'node';
     drag.id = card.dataset.id;
@@ -2191,13 +2265,38 @@ vp.addEventListener('pointerdown', e => {
     drag.mode = 'pan';
     drag.pan = { x: state.view.panX, y: state.view.panY };
   }
+  if (drag.touch) {
+    // press and hold (a finger's double-click): rename a card, or add an idea on the empty map
+    clearTimeout(pressTimer);
+    const d0 = drag;
+    pressTimer = setTimeout(() => {
+      if (drag !== d0 || d0.moved) return;
+      drag = null;
+      navigator.vibrate?.(12);
+      if (d0.mode === 'node') startRename(d0.id);
+      else addRoot('idea', toWorld(d0.sx, d0.sy));
+    }, 550);
+  }
 });
+vp.addEventListener('contextmenu', e => { if (e.pointerType === 'touch' || pts.size) e.preventDefault(); });
 window.addEventListener('pointermove', e => {
-  if (!drag) return;
+  if (pts.has(e.pointerId)) pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch) {
+    if (pts.size < 2) return;
+    // zoom around the point between the fingers, and follow them as they move
+    const m = pinchInfo(), v = state.view;
+    v.zoom = Math.min(2.5, Math.max(0.2, pinch.z * m.d / pinch.d));
+    v.panX = m.x - pinch.wx * v.zoom;
+    v.panY = m.y - pinch.wy * v.zoom;
+    applyView();
+    return;
+  }
+  if (!drag || e.pointerId !== drag.pid) return;
   const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
   if (!drag.moved) {
-    if (Math.hypot(dx, dy) < 4) return;
+    if (Math.hypot(dx, dy) < (drag.touch ? 10 : 4)) return;
     drag.moved = true;
+    clearTimeout(pressTimer);
     getSelection().removeAllRanges();
     if (drag.mode === 'node') {
       snapshot();
@@ -2227,11 +2326,28 @@ window.addEventListener('pointermove', e => {
     applyView();
   }
 });
-window.addEventListener('pointerup', () => {
-  if (!drag) return;
+function fingerUp(e) {
+  pts.delete(e.pointerId);
+  clearTimeout(pressTimer);
+  if (pinch && pts.size < 2) { pinch = null; save(); }
+}
+window.addEventListener('pointercancel', e => {
+  fingerUp(e);
+  if (!drag || e.pointerId !== drag.pid) return;
+  if (drag.moved) save();
+  drag = null;
+  vp.classList.remove('panning');
+  setDropCard(null);
+  document.body.classList.remove('reparent');
+});
+window.addEventListener('pointerup', e => {
+  fingerUp(e);
+  if (!drag || e.pointerId !== drag.pid) return;
   const d = drag;
   drag = null;
   vp.classList.remove('panning');
+  // on a phone, tapping the empty map also tucks the agenda sheet away
+  if (!d.moved && d.mode === 'pan' && PHONE.matches && agendaOpen) setAgendaOpen(false);
   if (d.target) { setDropCard(null); document.body.classList.remove('reparent'); }
   if (!d.moved) select(d.mode === 'node' ? d.id : null);
   else if (!d.target || !moveUnder(d.id, d.target, false)) save(); // the drag already took the undo snapshot
@@ -2458,7 +2574,14 @@ $('#tlScroll').addEventListener('dblclick', e => {
 $('#arrange').onclick = arrangeMap;
 // showing or hiding cards changes what's on the map, so re-tidy it to close gaps and avoid overlaps
 $('#hideDone').onclick = () => { setHideDone(!hideDone); if (sel && !isVisible(byId.get(sel))) sel = null; render(); autoArrange(true); };
-$('#agendaBtn').onclick = () => { agendaOpen = !agendaOpen; $('#agendaBtn').setAttribute('aria-pressed', agendaOpen); renderAgenda(); };
+function setAgendaOpen(v) {
+  agendaOpen = v;
+  $('#agendaBtn').setAttribute('aria-pressed', v);
+  // phones show one sheet at a time
+  if (v && PHONE.matches && sel) select(null);
+  else renderAgenda();
+}
+$('#agendaBtn').onclick = () => setAgendaOpen(!agendaOpen);
 $('#undoBtn').onclick = undo;
 $('#redoBtn').onclick = redo;
 $('#search').addEventListener('input', e => { query = e.target.value; render(); });
@@ -2996,6 +3119,26 @@ document.addEventListener('paste', e => {
 });
 $('#viewer').addEventListener('click', () => { $('#viewer').hidden = true; });
 
+/* ---------- Phone layout ---------- */
+// On a narrow screen the less-used toolbar buttons move into a "More" menu, and the side panels become bottom sheets.
+const PHONE = matchMedia('(max-width: 640px)');
+const moreSpots = ['arrange', 'hideDone', 'teamsBtn', 'redoBtn', 'exportBtn', 'importBtn', 'reportBtn', 'installBtn', 'themeBtn'].map(id => {
+  const el = $('#' + id), mark = document.createComment(id);
+  el.before(mark);
+  return [el, mark];
+});
+function layoutForPhone() {
+  for (const [el, mark] of moreSpots) { if (PHONE.matches) $('#moreMenu').appendChild(el); else mark.after(el); }
+  if (!PHONE.matches) $('#moreMenu').classList.remove('open');
+}
+layoutForPhone();
+PHONE.addEventListener('change', () => { layoutForPhone(); renderAgenda(); });
+if (PHONE.matches) { agendaOpen = false; $('#agendaBtn').setAttribute('aria-pressed', false); } // start with the map in view
+$('#moreBtn').onclick = () => $('#moreMenu').classList.toggle('open');
+document.addEventListener('pointerdown', e => { if (!e.target.closest?.('#moreMenu, #moreBtn')) $('#moreMenu').classList.remove('open'); });
+// the theme button stays open so you can cycle through the themes
+$('#moreMenu').addEventListener('click', e => { const b = e.target.closest('.btn'); if (b && b.id !== 'themeBtn') $('#moreMenu').classList.remove('open'); });
+
 /* ---------- Reminders ---------- */
 // A once-a-day list of what's due or overdue, optional desktop notifications, and a nudge to back up.
 // They can only run while the app is open (a minimised window is fine).
@@ -3070,7 +3213,7 @@ $('#rmAgenda').onclick = () => {
   closeReminders();
   sideTab = 'agenda';
   try { localStorage.setItem(SIDE_KEY, sideTab); } catch (err) { }
-  if (!agendaOpen) $('#agendaBtn').click(); else renderAgenda();
+  if (!agendaOpen) setAgendaOpen(true); else renderAgenda();
 };
 $('#stats').addEventListener('click', e => { if (e.target.closest('.od')) openReminders(); });
 
