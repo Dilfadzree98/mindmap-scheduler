@@ -462,6 +462,32 @@ body.dropping::after, body.reparent::after {
 }
 .node.drop-target { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
 
+/* ---------- Waits for ---------- */
+.pill.wait { color: var(--warn); border-color: currentColor; }
+.ag-wait { flex: none; display: inline-flex; color: var(--warn); }
+.ag-wait .i { width: 12px; height: 12px; }
+#fDeps:empty { display: none; }
+.chip.dep { padding-left: 0; }
+.chip .dep-go { display: inline-flex; align-items: center; gap: 6px; padding: 0 0 0 8px; color: var(--text); font-size: 12.5px; }
+.chip .dep-go:hover span { text-decoration: underline; }
+.chip .dep-go .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.chip .dep-go small { color: var(--muted); }
+.chip.dep.ok .dep-go { color: var(--muted); }
+.chip.dep.ok .dep-go .i { color: var(--ok); }
+#details .dep-add { margin-top: 4px; padding: 4px 10px; font-size: 12.5px; }
+.dep-warn { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin: 6px 0 4px; color: var(--bad); font-size: 12px; }
+.dep-warn .btn { padding: 3px 9px; font-size: 12px; color: var(--bad); border-color: currentColor; }
+.dep-blocks { margin-top: 8px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+.dep-link { border: none; background: none; padding: 0; color: var(--accent); font-size: 12px; cursor: pointer; }
+.dep-link:hover { text-decoration: underline; }
+#edges path.dep { stroke: var(--accent); stroke-dasharray: 6 5; stroke-width: 2; opacity: .9; }
+#edges path.dep.bad { stroke: var(--bad); }
+#edges marker path, .tl-deps marker path { fill: var(--accent); stroke: none; opacity: 1; }
+#edges marker.bad path, .tl-deps marker.bad path { fill: var(--bad); }
+.tl-deps { position: absolute; left: 0; top: 0; z-index: 1; overflow: visible; pointer-events: none; }
+.tl-deps > path { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: .85; }
+.tl-deps > path.bad { stroke: var(--bad); opacity: 1; }
+
 /* ---------- Checklist ---------- */
 #fCheckCount { color: var(--muted); font-weight: 400; margin-left: 4px; }
 .checklist { display: flex; flex-direction: column; gap: 1px; margin: 6px 0 4px; }
@@ -786,6 +812,12 @@ body.dropping::after, body.reparent::after {
       </select>
     </label>
     <div class="fhint" id="repeatHint" hidden>When you tick it done, the next one is added automatically.</div>
+    <div class="flabel">Waits for
+      <div class="chips" id="fDeps"></div>
+      <div class="dep-warn" id="fDepWarn" hidden><span id="fDepWarnText"></span><button class="btn" id="fDepFix">Move it after</button></div>
+      <button class="btn dep-add" id="fDepAdd"><span data-i="link"></span>Add a task it waits for</button>
+      <div class="dep-blocks" id="fBlocks" hidden></div>
+    </div>
     <label>Notes<textarea id="fNotes" rows="6" placeholder="Details, links, thoughts…"></textarea></label>
     <div class="flabel">Checklist<span id="fCheckCount"></span>
       <div class="checklist" id="fChecklist"></div>
@@ -850,7 +882,7 @@ body.dropping::after, body.reparent::after {
 <div id="moveDlg" class="overlay" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mvTitle">
     <h3 id="mvTitle" class="dlg-h"><span id="mvName"></span><button class="iconbtn" id="mvClose" title="Close (Esc)" aria-label="Close"><span data-i="x"></span></button></h3>
-    <p>Pick where it should go. Its sub-tasks move with it.</p>
+    <p id="mvHint"></p>
     <input id="mvSearch" class="mv-search" placeholder="Search projects and tasks…" autocomplete="off">
     <div id="mvList" class="mv-list"></div>
   </div>
@@ -887,6 +919,8 @@ const vp = $('#viewport');
 const ICONS = {
   network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
   checklist: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
   more: '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
@@ -964,6 +998,7 @@ const FMT = {
   date: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 };
 const shortDate = s => FMT.short.format(parseDate(s));
+const dayDiff = (a, b) => Math.round((parseDate(b) - parseDate(a)) / 864e5);
 const weekday = s => FMT.weekday.format(parseDate(s));
 
 function index() {
@@ -986,6 +1021,47 @@ function ancestors(n) {
   return a;
 }
 const rootOf = n => ancestors(n).pop() || n;
+// "Waits for": an item can't really start until the items it depends on are done
+const depsOf = n => n.dependsOn.map(id => byId.get(id)).filter(Boolean);
+const waitingOn = n => depsOf(n).filter(d => !d.done);
+const waitersOf = n => state.nodes.filter(m => m.dependsOn.includes(n.id));
+// does a wait for b, directly or along a chain?
+function waitsFor(a, b, seen = new Set()) {
+  if (a.id === b.id) return true;
+  if (seen.has(a.id)) return false;
+  seen.add(a.id);
+  return depsOf(a).some(d => waitsFor(d, b, seen));
+}
+const spanStart = n => n.startDate || n.dueDate, spanEnd = n => n.dueDate || n.startDate;
+// b waits for a, but is planned to start on or before the day a is due
+const clashes = (a, b) => !a.done && !b.done && !!spanEnd(a) && !!spanStart(b) && spanStart(b) <= spanEnd(a);
+const clashWith = n => depsOf(n).find(d => clashes(d, n)) || null;
+const clip = (s, k = 18) => s.length > k ? s.slice(0, k - 1) + '…' : s;
+// move an item's dates, with its unfinished sub-tasks; returns everything that moved
+function shiftItem(m, days) {
+  const list = [m, ...descendants(m.id).filter(k => !k.done)];
+  for (const x of list) {
+    if (x.startDate) x.startDate = shiftDate(x.startDate, days);
+    if (x.dueDate) x.dueDate = shiftDate(x.dueDate, days);
+  }
+  return list;
+}
+// After items end later, the unfinished items waiting for them move along (keeping their length), and so on down
+// the chain. Only ever moves things later. Returns how many waiting items moved.
+function pushWaiters(from) {
+  const pushed = new Set(), queue = [...from];
+  for (let guard = 0; queue.length && guard < 5000; guard++) {
+    const n = queue.shift(), end = spanEnd(n);
+    if (!end) continue;
+    for (const m of waitersOf(n)) {
+      if (m.done || !spanStart(m) || spanStart(m) > end) continue;
+      queue.push(...shiftItem(m, dayDiff(spanStart(m), end) + 1));
+      pushed.add(m.id);
+    }
+  }
+  return pushed.size;
+}
+const pushedNote = k => k ? ` · ${k} waiting task${k === 1 ? '' : 's'} moved later` : '';
 function colorOf(n) {
   for (let c = n; c; c = c.parentId && byId.get(c.parentId)) if (c.color) return c.color;
   return PALETTE[0];
@@ -1077,7 +1153,7 @@ function makeNode(o) {
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
     teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
     done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null, repeat: null,
-    series: null, checklist: []
+    series: null, checklist: [], dependsOn: []
   }, o);
 }
 let saveTimer;
@@ -1156,7 +1232,8 @@ function sanitize(d) {
       repeat: REPEAT[r.repeat] ? r.repeat : null,
       series: typeof r.series === 'string' ? r.series : null,
       checklist: (Array.isArray(r.checklist) ? r.checklist : []).filter(c => c && typeof c.text === 'string')
-        .map(c => ({ id: typeof c.id === 'string' ? c.id : uid(), text: c.text.slice(0, 500), done: !!c.done }))
+        .map(c => ({ id: typeof c.id === 'string' ? c.id : uid(), text: c.text.slice(0, 500), done: !!c.done })),
+      dependsOn: Array.isArray(r.dependsOn) ? [...new Set(r.dependsOn.filter(x => typeof x === 'string'))] : []
     }));
   }
   const m = new Map(nodes.map(n => [n.id, n]));
@@ -1169,6 +1246,11 @@ function sanitize(d) {
       seen.add(p);
     }
   }
+  // "waits for" links: only to items that exist, never to itself, and never in a loop
+  const kept = new Map(nodes.map(n => [n.id, []]));
+  const reaches = (from, to, seen = new Set()) => from === to || (!seen.has(from) && (seen.add(from), kept.get(from).some(x => reaches(x, to, seen))));
+  for (const n of nodes) for (const id of n.dependsOn) if (m.has(id) && !reaches(id, n.id)) kept.get(n.id).push(id);
+  for (const n of nodes) n.dependsOn = kept.get(n.id);
   nodes.filter(n => !n.parentId && !n.color).forEach((n, i) => n.color = PALETTE[i % PALETTE.length]);
   const v = d.view || {};
   return { version: 1, nodes, teams, view: { panX: +v.panX || 0, panY: +v.panY || 0, zoom: Math.min(2.5, Math.max(.2, +v.zoom || 1)) } };
@@ -1222,6 +1304,9 @@ function cardFor(n, memo, q) {
   const di = n.done && n.doneAt ? null : dueInfo(n);
   if (di) meta.push(`<span class="pill due ${di.cls}" title="${n.startDate ? 'Start ' + shortDate(n.startDate) + ' · ' : ''}Due ${shortDate(n.dueDate)}">${icon('calendar')}${di.txt}</span>`);
   else if (n.startDate) meta.push(`<span class="pill" title="Start date">${icon('clock')}${shortDate(n.startDate)}</span>`);
+  const wait = n.done ? [] : waitingOn(n);
+  if (wait.length) meta.push(`<span class="pill wait" title="Waits for: ${esc(wait.map(d => d.title || 'Untitled').join(', '))}">${icon('lock')}` +
+    `${wait.length === 1 ? 'Waits for ' + esc(clip(wait[0].title || 'Untitled')) : `Waits for ${wait.length}`}</span>`);
   if (REPEAT[n.repeat]) meta.push(`<span class="pill rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}. When it's done, the next one is created.">${icon('repeat')}${REPEAT[n.repeat][1]}</span>`);
   const steps = n.checklist.length, stepsDone = n.checklist.filter(c => c.done).length;
   if (steps) meta.push(`<button class="pill ckp${stepsDone === steps ? ' full' : ''}${n.expanded ? ' on' : ''}" ` +
@@ -1271,7 +1356,6 @@ try {
   mainView = localStorage.getItem(VIEW_KEY) === 'timeline' ? 'timeline' : 'map';
   tlScale = TL_DAY[localStorage.getItem(TL_KEY)] ? localStorage.getItem(TL_KEY) : 'day';
 } catch (e) { }
-const dayDiff = (a, b) => Math.round((parseDate(b) - parseDate(a)) / 864e5);
 function tlSpan(n) {
   let a = n.startDate || n.dueDate, b = n.dueDate || n.startDate;
   if (!a) return null;
@@ -1350,6 +1434,7 @@ function renderTimeline() {
     return `<div class="tl-row${group ? ' group' : ''}${n.done ? ' done' : ''}${n.id === sel ? ' sel' : ''}" data-id="${n.id}">` +
       `<div class="tl-label" style="--d:${d}" title="${esc(n.title)}">${lead}<span class="t">${esc(n.title || 'Untitled')}</span>` +
       `${REPEAT[n.repeat] ? `<span class="ag-rep">${icon('repeat')}</span>` : ''}` +
+      `${!n.done && waitingOn(n).length ? `<span class="ag-wait" title="Waits for: ${esc(waitingOn(n).map(d => d.title).join(', '))}">${icon('lock')}</span>` : ''}` +
       `${late ? `<span class="late">${-daysUntil(n.dueDate)}d late</span>` : ''}</div>` +
       `<div class="${track}">${span ? bar(n, span, sum) : ''}</div></div>`;
   };
@@ -1364,6 +1449,31 @@ function renderTimeline() {
     `<div class="tl-cols" style="width:${W}px">${months}${ticks}</div></div>${body}` +
     (showToday ? `<div class="tl-today" style="left:${LW + x(today) + dw / 2}px" title="Today"></div>` : '') + '</div>';
   [box.scrollLeft, box.scrollTop] = keep;
+  drawTlDeps(box);
+}
+const arrowDefs = (id, bad) => `<defs><marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">` +
+  `<path d="M0,0 L10,5 L0,10 z"/></marker><marker id="${bad}" class="bad" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">` +
+  `<path d="M0,0 L10,5 L0,10 z"/></marker></defs>`;
+// an arrow from each item to the items waiting for it; red when one is planned to start before the other is due
+function drawTlDeps(box) {
+  const grid = box.querySelector('.tl-grid');
+  if (!grid || !state.nodes.some(n => n.dependsOn.length)) return;
+  const g = grid.getBoundingClientRect(), pos = new Map();
+  for (const b of grid.querySelectorAll('.tl-b:not(.sum)')) {
+    const r = b.getBoundingClientRect();
+    pos.set(b.dataset.id, { x0: r.left - g.left, x1: r.right - g.left, y: r.top - g.top + r.height / 2 });
+  }
+  let paths = '';
+  for (const n of state.nodes) for (const d of depsOf(n)) {
+    const a = pos.get(d.id), b = pos.get(n.id);
+    if (!a || !b) continue;
+    const bad = clashes(d, n), side = b.y < a.y ? -15 : 15;
+    // straight across when there's room, otherwise down (or up) between the rows and back
+    const path = b.x0 - a.x1 >= 16 ? `M${a.x1},${a.y} H${a.x1 + 8} V${b.y} H${b.x0 - 2}`
+      : `M${a.x1},${a.y} h8 V${a.y + side} H${b.x0 - 12} V${b.y} H${b.x0 - 2}`;
+    paths += `<path${bad ? ' class="bad"' : ''} d="${path}" marker-end="url(#${bad ? 'tlArrBad' : 'tlArr'})"/>`;
+  }
+  if (paths) grid.insertAdjacentHTML('beforeend', `<svg class="tl-deps" width="${grid.scrollWidth}" height="${grid.scrollHeight}">${arrowDefs('tlArr', 'tlArrBad')}${paths}</svg>`);
 }
 // scroll so today (or a given date) sits a little in from the left edge
 function tlScrollTo(date) {
@@ -1451,7 +1561,15 @@ function drawEdges() {
     const dx = Math.max(30, Math.abs(x2 - x1) / 2) * (x2 >= x1 ? 1 : -1);
     s += `<path d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}" stroke="${colorOf(n)}"${n.done ? ' class="done"' : ''}/>`;
   }
-  $('#edges').innerHTML = s;
+  // the selected item's "waits for" links, as dashed arrows from what comes first to what waits
+  const cur = sel && byId.get(sel);
+  if (cur) for (const [a, b] of [...depsOf(cur).map(d => [d, cur]), ...waitersOf(cur).map(m => [cur, m])]) {
+    if (!sizes.has(a.id) || !sizes.has(b.id)) continue;
+    const sa = sizes.get(a.id), sb = sizes.get(b.id), bad = clashes(a, b);
+    const x1 = a.x + sa.w, y1 = a.y + sa.h / 2, x2 = b.x, y2 = b.y + sb.h / 2, dx = Math.max(40, Math.abs(x2 - x1) / 2);
+    s += `<path class="dep${bad ? ' bad' : ''}" d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2 - 3},${y2}" marker-end="url(#${bad ? 'mapArrBad' : 'mapArr'})"/>`;
+  }
+  $('#edges').innerHTML = (cur ? arrowDefs('mapArr', 'mapArrBad') : '') + s;
 }
 function renderStats(memo) {
   let total = 0, done = 0, overdue = 0;
@@ -1571,7 +1689,8 @@ function renderAgenda() {
       `<div class="ag-main"><div class="ag-t" title="${esc(n.title)}">` +
       `${PRIO[n.priority] && !n.done ? `<span class="ag-flag p-${n.priority}" title="${PRIO[n.priority][0]} priority">${icon('flag')}</span>` : ''}` +
       `<span>${esc(n.title || 'Untitled')}</span>` +
-      `${REPEAT[n.repeat] ? `<span class="ag-rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}">${icon('repeat')}</span>` : ''}</div>` +
+      `${REPEAT[n.repeat] ? `<span class="ag-rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}">${icon('repeat')}</span>` : ''}` +
+      `${!n.done && waitingOn(n).length ? `<span class="ag-wait" title="Waits for: ${esc(waitingOn(n).map(d => d.title).join(', '))}">${icon('lock')}</span>` : ''}</div>` +
       `${where ? `<div class="ag-meta"><span class="dot"></span><span>${esc(where)}</span></div>` : ''}</div>` +
       `${teamById(n.assigneeTeam) ? teamBadge(teamById(n.assigneeTeam)) : n.assignee ? avatar(n.assignee) : ''}${agDate(n)}</div>`;
   };
@@ -1609,6 +1728,21 @@ function renderSwatches(n) {
   custom.style.setProperty('--c', cur);
 }
 function setVal(el, v) { if (document.activeElement !== el && el.value !== v) el.value = v; }
+function renderWaits(n) {
+  $('#fDeps').innerHTML = depsOf(n).map(d =>
+    `<span class="chip dep${d.done ? ' ok' : ''}" style="--c:${colorOf(d)}"><button class="dep-go" data-go="${d.id}" title="${d.done ? 'Done' : 'Not done yet'} — click to see it">` +
+    `${d.done ? icon('check') : '<i class="dot"></i>'}<span>${esc(clip(d.title || 'Untitled', 28))}</span>` +
+    `${!d.done && d.dueDate ? `<small>due ${shortDate(d.dueDate)}</small>` : ''}</button>` +
+    `<button data-dep="${d.id}" title="Remove" aria-label="Remove">${icon('x')}</button></span>`).join('');
+  const clash = clashWith(n);
+  $('#fDepWarn').hidden = !clash;
+  if (clash) $('#fDepWarnText').textContent =
+    `${n.startDate ? 'Starts' : 'Is due'} before "${clip(clash.title || 'Untitled', 30)}" is done (due ${shortDate(spanEnd(clash))}).`;
+  const waiters = waitersOf(n);
+  $('#fBlocks').hidden = !waiters.length;
+  $('#fBlocks').innerHTML = waiters.length ? 'Waiting for this one: ' +
+    waiters.map(m => `<button class="dep-link" data-go="${m.id}">${esc(clip(m.title || 'Untitled', 28))}</button>`).join(', ') : '';
+}
 // rebuilt only when steps are added, removed or ticked, so typing in a step keeps its cursor
 function renderChecklist(n) {
   const box = $('#fChecklist'), key = n.id + ':' + n.checklist.map(c => c.id + (c.done ? '+' : '-')).join(',');
@@ -1636,6 +1770,7 @@ function renderPanel() {
   setVal($('#fRemark'), n.remark);
   renderFiles(n);
   renderChecklist(n);
+  renderWaits(n);
   // roots pick a team (+ extra people); everything below is assigned to a team or one person
   $('#teamFields').hidden = !!n.parentId;
   $('#assignWrap').hidden = !n.parentId;
@@ -1784,6 +1919,7 @@ function select(id) {
   if (id) cardEl(id)?.classList.add('selected');
   document.querySelectorAll('.tl-row.sel').forEach(el => el.classList.remove('sel'));
   if (id) document.querySelector(`.tl-row[data-id="${id}"]`)?.classList.add('sel');
+  drawEdges(); // its "waits for" arrows
   renderPanel();
   renderAgenda();
 }
@@ -1875,6 +2011,7 @@ function repeatTask(n) {
     done: false, doneAt: null, remark: '', attachments: [], expanded: false, collapsed: false, createdAt: Date.now(),
     teamIds: [...x.teamIds], members: [...x.members], series: x === n ? n.series || n.id : x.series,
     checklist: x.checklist.map(c => ({ ...c, id: uid(), done: false })),
+    dependsOn: x.dependsOn.map(id => ids.get(id) || id),
     startDate: move(x.startDate), dueDate: x === n ? due : move(x.dueDate)
   }));
   n.repeat = null;
@@ -2123,6 +2260,7 @@ function deleteNode(id) {
   snapshot();
   const gone = new Set([id, ...d.map(x => x.id)]);
   state.nodes = state.nodes.filter(x => !gone.has(x.id));
+  for (const x of state.nodes) if (x.dependsOn.some(i => gone.has(i))) x.dependsOn = x.dependsOn.filter(i => !gone.has(i));
   sel = n.parentId || null;
   render();
   toast('Deleted — Ctrl+Z to undo');
@@ -2157,40 +2295,73 @@ function moveUnder(id, pid, snap = true) {
     `${sub.length ? ` with ${sub.length} sub-item${sub.length === 1 ? '' : 's'}` : ''} · Ctrl+Z to undo`);
   return true;
 }
-let moveId = null;
-function openMove(id) {
-  const n = byId.get(id);
-  if (!n) return;
-  moveId = id;
-  $('#mvName').textContent = `Move "${n.title || 'Untitled'}" to…`;
+// One searchable list of every item, to pick a new parent (Move) or something a task waits for.
+// prune(m): leave out m and everything under it · note(m): why m can't be picked · top: an extra first choice
+let picker = null;
+function openPicker(opts) {
+  picker = opts;
+  $('#mvName').textContent = opts.title;
+  $('#mvHint').textContent = opts.hint;
   $('#mvSearch').value = '';
-  renderMoveList();
+  renderPicker();
   $('#moveDlg').hidden = false;
   $('#mvSearch').focus();
 }
-function closeMove() { $('#moveDlg').hidden = true; moveId = null; }
-function renderMoveList() {
-  const n = byId.get(moveId);
-  if (!n) return;
-  const q = $('#mvSearch').value.trim().toLowerCase(), out = [];
+function closePicker() { $('#moveDlg').hidden = true; picker = null; }
+function renderPicker() {
+  if (!picker) return;
+  const q = $('#mvSearch').value.trim().toLowerCase(), out = [], top = picker.top;
   const byY = list => [...list].sort((a, b) => a.y - b.y);
   const walk = (m, d) => {
-    if (!canMoveUnder(n, m.id)) return; // not itself, nor anything under it
+    if (picker.prune(m)) return;
     if (!q || m.title.toLowerCase().includes(q)) out.push([m, d]);
     for (const k of byY(childrenOf(m.id))) walk(k, d + 1);
   };
   for (const r of byY(state.nodes.filter(m => !m.parentId))) walk(r, 0);
-  let html = n.parentId && (!q || 'own project'.includes(q))
-    ? `<button class="mv-row top" data-id="">${icon('folder')}<span class="t">Make it its own project</span></button>` : '';
+  let html = top && (!q || top.label.toLowerCase().includes(q))
+    ? `<button class="mv-row top" data-id="">${icon(top.icon)}<span class="t">${esc(top.label)}</span></button>` : '';
   html += out.map(([m, d]) => {
-    const here = m.id === n.parentId, path = q ? ancestors(m).reverse().map(a => a.title).join(' › ') : '';
-    return `<button class="mv-row${m.done ? ' done' : ''}" data-id="${m.id}" style="--c:${colorOf(m)};--ind:${q ? 0 : d * 18}px"${here ? ' disabled' : ''}>` +
-      `<span class="dot"></span><span class="t">${esc(m.title || 'Untitled')}${here ? ' (here now)' : ''}</span>` +
+    const note = picker.note(m), path = q ? ancestors(m).reverse().map(a => a.title).join(' › ') : '';
+    return `<button class="mv-row${m.done ? ' done' : ''}" data-id="${m.id}" style="--c:${colorOf(m)};--ind:${q ? 0 : d * 18}px"${note ? ' disabled' : ''}>` +
+      `<span class="dot"></span><span class="t">${esc(m.title || 'Untitled')}${note ? ` (${esc(note)})` : ''}</span>` +
       `${path ? `<span class="path">${esc(path)}</span>` : ''}</button>`;
   }).join('');
   $('#mvList').innerHTML = html || '<div class="mv-empty">Nothing matches</div>';
 }
-$('#mvSearch').addEventListener('input', renderMoveList);
+function openMove(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  openPicker({
+    title: `Move "${n.title || 'Untitled'}" to…`, hint: 'Pick where it should go. Its sub-tasks move with it.',
+    prune: m => !canMoveUnder(n, m.id), // not itself, nor anything under it
+    note: m => m.id === n.parentId ? 'here now' : null,
+    top: n.parentId ? { label: 'Make it its own project', icon: 'folder' } : null,
+    onPick: pid => { if (moveUnder(id, pid)) focusNode(id); }
+  });
+}
+function openWaitPicker(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  openPicker({
+    title: `"${n.title || 'Untitled'}" waits for…`,
+    hint: 'Pick what has to be finished first. Moving that later on the timeline pushes this one along.',
+    prune: m => m.id === n.id, // nor its own sub-tasks
+    note: m => ancestors(n).includes(m) ? 'it sits under this' : n.dependsOn.includes(m.id) ? 'already'
+      : waitsFor(m, n) ? 'that waits for this one' : null,
+    top: null,
+    onPick: did => did && addWait(n, did)
+  });
+}
+function addWait(n, did) {
+  const d = byId.get(did);
+  if (!d) return;
+  snapshot();
+  n.dependsOn.push(did);
+  render();
+  toast(`"${clip(n.title || 'Untitled', 30)}" now waits for "${clip(d.title || 'Untitled', 30)}"` +
+    `${clashes(d, n) ? ' · it starts before that is due' : ''} · Ctrl+Z to undo`);
+}
+$('#mvSearch').addEventListener('input', renderPicker);
 $('#mvSearch').addEventListener('keydown', e => {
   const first = $('#mvList .mv-row:not([disabled])');
   if (e.key === 'Enter' && first) { e.preventDefault(); first.click(); }
@@ -2205,13 +2376,13 @@ $('#mvList').addEventListener('keydown', e => {
 });
 $('#mvList').addEventListener('click', e => {
   const b = e.target.closest('.mv-row');
-  if (!b || b.disabled) return;
-  const id = moveId;
-  closeMove();
-  if (moveUnder(id, b.dataset.id || null)) focusNode(id);
+  if (!b || b.disabled || !picker) return;
+  const pick = picker.onPick;
+  closePicker();
+  pick(b.dataset.id || null);
 });
-$('#mvClose').onclick = closeMove;
-$('#moveDlg').addEventListener('pointerdown', e => { if (e.target.id === 'moveDlg') closeMove(); });
+$('#mvClose').onclick = closePicker;
+$('#moveDlg').addEventListener('pointerdown', e => { if (e.target.id === 'moveDlg') closePicker(); });
 function startRename(id) {
   const card = cardEl(id), n = byId.get(id);
   if (!card || !n) return;
@@ -2508,7 +2679,7 @@ document.addEventListener('keydown', e => {
   if (!$('#viewer').hidden) { if (e.key === 'Escape') $('#viewer').hidden = true; return; }
   if (!$('#modal').hidden) { if (e.key === 'Escape') closeRemark(false); return; }
   if (!$('#choice').hidden) { if (e.key === 'Escape') choiceCancel?.(); return; }
-  if (!$('#moveDlg').hidden) { if (e.key === 'Escape') closeMove(); return; }
+  if (!$('#moveDlg').hidden) { if (e.key === 'Escape') closePicker(); return; }
   if (!$('#remindDlg').hidden) { if (e.key === 'Escape') closeReminders(); return; }
   if (!$('#teamsDlg').hidden) {
     if (e.key === 'Escape') closeTeams();
@@ -2614,11 +2785,12 @@ function tlDrop(e) {
     n.startDate = a;
     n.dueDate = z;
   }
+  const pushed = pushWaiters([n, ...d.kids.map(c => c.k)]);
   sel = n.id;
   render();
   const moved = d.mode === 'move' ? d.kids.length : 0;
   toast(`${n.title || 'Untitled'}: ${shortDate(a)}${a !== z ? ' – ' + shortDate(z) : ''}` +
-    `${moved ? ` · ${moved} sub-task${moved === 1 ? '' : 's'} moved too` : ''} · Ctrl+Z to undo`);
+    `${moved ? ` · ${moved} sub-task${moved === 1 ? '' : 's'} moved too` : ''}${pushedNote(pushed)} · Ctrl+Z to undo`);
 }
 $('#tlScroll').addEventListener('pointerup', tlDrop);
 $('#tlScroll').addEventListener('pointercancel', tlDrop);
@@ -2719,7 +2891,8 @@ function addNodes(list, teams = []) {
   const dy = bottom === -Infinity ? 0 : bottom + 80 - Math.min(...list.map(n => n.y));
   const added = list.map(n => ({
     ...n, id: ids.get(n.id), parentId: n.parentId ? ids.get(n.parentId) : null, x: n.x + dx, y: n.y + dy,
-    teamIds: n.teamIds.map(id => teamIds.get(id)).filter(Boolean), assigneeTeam: teamIds.get(n.assigneeTeam) || null
+    teamIds: n.teamIds.map(id => teamIds.get(id)).filter(Boolean), assigneeTeam: teamIds.get(n.assigneeTeam) || null,
+    dependsOn: n.dependsOn.map(id => ids.get(id)).filter(Boolean)
   }));
   state.nodes.push(...added);
   return added.find(n => !n.parentId)?.id;
@@ -2742,7 +2915,8 @@ function reportRows(roots) {
       doneOn: n.done && n.doneAt ? fmtDate(new Date(n.doneAt)) : null,
       files: n.attachments.map(a => a.name).join(', '),
       steps: n.checklist.length ? `${n.checklist.filter(c => c.done).length}/${n.checklist.length}: ` +
-        n.checklist.map(c => (c.done ? '✓ ' : '○ ') + c.text).join('; ') : ''
+        n.checklist.map(c => (c.done ? '✓ ' : '○ ') + c.text).join('; ') : '',
+      waits: depsOf(n).map(d => (d.done ? '✓ ' : '') + (d.title || 'Untitled')).join(', ')
     });
     for (const c of ch) walk(c, d + 1, root);
   };
@@ -2847,13 +3021,13 @@ function reportExcel(id) {
   ];
   const tasks = [
     ['Project / idea', 'Item', 'Type', 'Status', 'Priority', 'Assigned to', 'Start', 'Due', 'Completed on', 'Progress', 'Sub-tasks done',
-      'Repeats', 'Checklist', 'Notes', 'Remark', 'Attachments'].map(H),
+      'Repeats', 'Checklist', 'Waits for', 'Notes', 'Remark', 'Attachments'].map(H),
     ...rows.map(x => {
       const top = !x.d, t = top ? 3 : x.n.done ? 5 : 0, dt = top ? 4 : x.n.done ? 6 : 2, wrap = top ? 3 : 10;
       return [{ v: x.root.title || 'Untitled', s: t }, { v: '    '.repeat(x.d) + (x.n.title || 'Untitled'), s: t }, { v: x.type, s: t },
         { v: x.status, s: top ? 3 : x.late ? 7 : t }, { v: x.prio, s: x.prio === 'High' && !x.n.done ? 7 : t }, { v: x.who, s: t },
         { v: x.n.startDate, date: 1, s: dt }, { v: x.n.dueDate, date: 1, s: x.late && !top ? 11 : dt }, { v: x.doneOn, date: 1, s: dt },
-        { v: x.pct, s: top ? 9 : 8 }, { v: x.progress, s: t }, { v: x.repeat, s: t }, { v: x.steps, s: wrap },
+        { v: x.pct, s: top ? 9 : 8 }, { v: x.progress, s: t }, { v: x.repeat, s: t }, { v: x.steps, s: wrap }, { v: x.waits, s: wrap },
         { v: x.n.notes.trim(), s: wrap }, { v: x.n.remark.trim(), s: wrap }, { v: x.files, s: wrap }];
     })
   ];
@@ -2876,7 +3050,7 @@ function reportExcel(id) {
 <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: 'xl/styles.xml', data: XL_STYLES },
     { name: 'xl/worksheets/sheet1.xml', data: xlSheet([34, 10, 8, 8, 8, 10, 11, 13, 13, 40], summary) },
-    { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 40, 50, 36, 30], tasks) }
+    { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 40, 30, 50, 36, 30], tasks) }
   ], ct + '.sheet');
   saveBlob(blob, `mindmap-report-${file}-${todayStr()}.xlsx`);
   toast('Excel report downloaded');
@@ -2903,6 +3077,7 @@ function reportPrint(id) {
         `${r.repeat ? ` <small>(${r.repeat.toLowerCase()})</small>` : ''}${r.progress ? ` <small>${r.progress}</small>` : ''}` +
         `${r.n.notes.trim() ? `<div class="rp-note">${esc(r.n.notes.trim())}</div>` : ''}${r.n.remark.trim() ? `<div class="rp-note">Remark: ${esc(r.n.remark.trim())}</div>` : ''}` +
         `${r.steps ? `<div class="rp-note">Checklist ${esc(r.steps)}</div>` : ''}` +
+        `${r.waits ? `<div class="rp-note">Waits for: ${esc(r.waits)}</div>` : ''}` +
         `${r.files ? `<div class="rp-note">Attachments: ${esc(r.files)}</div>` : ''}</td>` +
         `<td class="nw st${r.late ? ' late' : ''}">${r.status}</td><td class="nw ${r.prio && !r.n.done ? 'p-' + r.n.priority : ''}">${r.prio}</td><td>${esc(r.who)}</td>` +
         `<td class="nw">${d(r.n.startDate)}</td><td class="nw${r.late ? ' late' : ''}">${d(r.n.dueDate)}</td><td class="nw">${d(r.doneOn)}</td></tr>`).join('') + '</tbody></table>';
@@ -2957,6 +3132,7 @@ function icsCalendar(roots, name) {
       (team || n.assignee) && `Assigned to: ${team ? team.name + ' (team)' : n.assignee}`,
       PRIO[n.priority] && `Priority: ${PRIO[n.priority][0]}`,
       REPEAT[n.repeat] && `Repeats: ${REPEAT[n.repeat][0].toLowerCase()}`,
+      n.dependsOn.length && `Waits for: ${depsOf(n).map(d => (d.done ? '✓ ' : '') + (d.title || 'Untitled')).join(', ')}`,
       n.notes.trim(),
       n.checklist.length && `Checklist:\n${n.checklist.map(c => (c.done ? '☑ ' : '☐ ') + c.text).join('\n')}`,
       'From Mind Map Scheduler'
@@ -3206,8 +3382,17 @@ const changeField = (el, apply) => el.addEventListener('change', () => {
   render();
 });
 changeField($('#fType'), (n, v) => n.type = v);
-changeField($('#fStart'), (n, v) => n.startDate = v || null);
-changeField($('#fDue'), (n, v) => n.dueDate = v || null);
+const dateField = (el, key) => el.addEventListener('change', () => {
+  const n = byId.get(sel);
+  if (!n) return;
+  snapshot();
+  n[key] = el.value || null;
+  const k = pushWaiters([n]);
+  render();
+  if (k) toast(`${k} waiting task${k === 1 ? '' : 's'} moved later · Ctrl+Z to undo`);
+});
+dateField($('#fStart'), 'startDate');
+dateField($('#fDue'), 'dueDate');
 changeField($('#fRepeat'), (n, v) => n.repeat = REPEAT[v] ? v : null);
 $('#fDone').addEventListener('change', () => sel && toggleDone(sel));
 // correct the completion date (e.g. ticked off a few days late); keeps the original time of day
@@ -3221,6 +3406,29 @@ $('#fDoneAt').addEventListener('change', e => {
   render();
 });
 $('#fTitle').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+// --- waits for
+$('#fDepAdd').onclick = () => sel && openWaitPicker(sel);
+$('#fDeps').addEventListener('click', e => {
+  const n = byId.get(sel), rm = e.target.closest('button[data-dep]'), go = e.target.closest('[data-go]');
+  if (!n) return;
+  if (rm) {
+    snapshot();
+    n.dependsOn = n.dependsOn.filter(id => id !== rm.dataset.dep);
+    render();
+    toast('No longer waits for it · Ctrl+Z to undo');
+  } else if (go) focusNode(go.dataset.go);
+});
+$('#fBlocks').addEventListener('click', e => { const go = e.target.closest('[data-go]'); if (go) focusNode(go.dataset.go); });
+// start the day after the clashing item is due (and push anything that waits for this one)
+$('#fDepFix').onclick = () => {
+  const n = byId.get(sel), d = n && clashWith(n);
+  if (!d) return;
+  snapshot();
+  const k = pushWaiters(shiftItem(n, dayDiff(spanStart(n), spanEnd(d)) + 1));
+  render();
+  toast(`"${clip(n.title || 'Untitled', 30)}" ${n.startDate ? 'now starts ' + shortDate(n.startDate) : 'is now due ' + shortDate(n.dueDate)}` +
+    `${pushedNote(k)} · Ctrl+Z to undo`);
+};
 // --- checklist: small steps inside one task
 function toggleStep(id, i) {
   const n = byId.get(id), c = n?.checklist[i];
