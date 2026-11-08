@@ -24,6 +24,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 - Duplicate an item with everything under it (D, or **Duplicate** in the side panel), e.g. to reuse a project as a template: the copy starts with nothing ticked, and picking a new first date moves all its dates
 - Start and due dates, overdue highlighting, and an agenda grouped by day
 - Timeline view (T): a bar from start to due date for every dated task, grouped by project, with a line for today. Drag a bar to move it, or drag its ends to change the dates
+- Month calendar (C): every dated item on its day, overdue ones in red. Drag an item to another day to move it (its sub-tasks and the tasks waiting for it follow along); on a phone, tap a day to see its list
 - Completion dates, plus a remark when closing an item that still has open sub-tasks
 - Checklists inside a task: small tick-box steps in the side panel, a "2/5" count on the card, and the steps can be ticked right on the card
 - Task dependencies: a task can wait for others (**Waits for** in the side panel). The timeline draws arrows between them, waiting cards show a lock, and moving a task later pushes the tasks waiting for it later too
