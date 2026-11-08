@@ -24,6 +24,7 @@ Your maps and attachments are saved in your own browser on your own computer. No
 - Start and due dates, overdue highlighting, and an agenda grouped by day
 - Timeline view (T): a bar from start to due date for every dated task, grouped by project, with a line for today. Drag a bar to move it, or drag its ends to change the dates
 - Completion dates, plus a remark when closing an item that still has open sub-tasks
+- Checklists inside a task: small tick-box steps in the side panel, a "2/5" count on the card, and the steps can be ticked right on the card
 - Priority flags (High, Medium, Low) with keys 1, 2, 3, plus an agenda filter and "High first" sorting
 - Recurring tasks (daily, weekly, monthly): ticking one done adds the next one automatically
 - Reminders: a pop-up when you open the app lists what is due today or overdue (click the red "overdue" count to see it again), optional Windows notifications, and a nudge to back up after 7 days of changes

@@ -462,6 +462,41 @@ body.dropping::after, body.reparent::after {
 }
 .node.drop-target { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
 
+/* ---------- Checklist ---------- */
+#fCheckCount { color: var(--muted); font-weight: 400; margin-left: 4px; }
+.checklist { display: flex; flex-direction: column; gap: 1px; margin: 6px 0 4px; }
+.checklist:empty { display: none; }
+.ck-row { display: flex; align-items: center; gap: 6px; padding: 0 2px 0 4px; border-radius: 6px; }
+.ck-row:hover, .ck-row:focus-within { background: var(--hover); }
+.ck-box { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--ok); cursor: pointer; }
+#details .ck-row .ck-text {
+  flex: 1; min-width: 0; width: auto; margin: 0; padding: 4px 6px; border-color: transparent; background: transparent; font-size: 13.5px; color: var(--text);
+}
+#details .ck-row .ck-text:focus { border-color: var(--border); background: var(--bg); outline: none; }
+.ck-row.done .ck-text { text-decoration: line-through; opacity: .6; }
+.ck-del { flex: none; opacity: 0; }
+.ck-row:hover .ck-del, .ck-row:focus-within .ck-del { opacity: 1; }
+#details #fCheckAdd { margin-top: 2px; }
+.pill.ckp.full { color: var(--ok); border-color: currentColor; }
+.pill.ckp.on { color: var(--accent); border-color: currentColor; }
+.xcheck { display: flex; flex-direction: column; gap: 2px; }
+.xnotes + .xcheck { margin-top: 8px; }
+.xck {
+  display: flex; align-items: flex-start; gap: 7px; padding: 2px 0; border: none; background: none; color: var(--text);
+  font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.xck .box { flex: none; width: 14px; height: 14px; margin-top: 1px; border: 1.5px solid var(--muted); border-radius: 4px; display: grid; place-items: center; }
+.xck:hover .box { border-color: var(--ok); }
+.xck.on .box { background: var(--ok); border-color: var(--ok); color: #fff; }
+.xck .box .i { width: 10px; height: 10px; stroke-width: 3.5; }
+.xck.on span:last-child { text-decoration: line-through; color: var(--muted); }
+.xmore { font-size: 11.5px; color: var(--muted); padding-left: 21px; }
+@media (pointer: coarse) {
+  .ck-del { opacity: 1; }
+  .ck-box { width: 20px; height: 20px; }
+  .xck { padding: 5px 0; }
+}
+
 /* ---------- Reminders ---------- */
 #backupBar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 14px; font-size: 13px;
@@ -752,6 +787,10 @@ body.dropping::after, body.reparent::after {
     </label>
     <div class="fhint" id="repeatHint" hidden>When you tick it done, the next one is added automatically.</div>
     <label>Notes<textarea id="fNotes" rows="6" placeholder="Details, links, thoughts…"></textarea></label>
+    <div class="flabel">Checklist<span id="fCheckCount"></span>
+      <div class="checklist" id="fChecklist"></div>
+      <input id="fCheckAdd" placeholder="Add a step, press Enter" autocomplete="off" maxlength="500">
+    </div>
     <label>Remark<textarea id="fRemark" rows="2" placeholder="Needed to mark done while sub-tasks are still open"></textarea></label>
     <div class="flabel">Attachments
       <div id="fFiles" class="files"></div>
@@ -848,6 +887,7 @@ const vp = $('#viewport');
 const ICONS = {
   network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  checklist: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
   more: '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
   move: '<path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/>',
@@ -1016,7 +1056,8 @@ const avatarStack = names => !names.length ? '' :
   `${names.length > 4 ? `<span class="av more">+${names.length - 4}</span>` : ''}</span>`;
 // notes as safe HTML with web links made clickable
 const linkify = s => esc(s).replace(/https?:\/\/[^\s<]+/g, u => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
-const matches = (n, q) => [n.title, n.notes, n.assignee, ...teamsOf(n).map(t => t.name), teamById(n.assigneeTeam)?.name, ...n.members]
+const matches = (n, q) => [n.title, n.notes, n.assignee, ...teamsOf(n).map(t => t.name), teamById(n.assigneeTeam)?.name, ...n.members,
+  ...n.checklist.map(c => c.text)]
   .join(' ').toLowerCase().includes(q);
 const cleanNames = a => Array.isArray(a)
   ? [...new Map(a.filter(m => typeof m === 'string' && m.trim()).map(m => [m.trim().toLowerCase(), m.trim().replace(/\s+/g, ' ')])).values()]
@@ -1036,7 +1077,7 @@ function makeNode(o) {
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
     teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
     done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null, repeat: null,
-    series: null
+    series: null, checklist: []
   }, o);
 }
 let saveTimer;
@@ -1113,7 +1154,9 @@ function sanitize(d) {
       createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null,
       priority: PRIO[r.priority] ? r.priority : null,
       repeat: REPEAT[r.repeat] ? r.repeat : null,
-      series: typeof r.series === 'string' ? r.series : null
+      series: typeof r.series === 'string' ? r.series : null,
+      checklist: (Array.isArray(r.checklist) ? r.checklist : []).filter(c => c && typeof c.text === 'string')
+        .map(c => ({ id: typeof c.id === 'string' ? c.id : uid(), text: c.text.slice(0, 500), done: !!c.done }))
     }));
   }
   const m = new Map(nodes.map(n => [n.id, n]));
@@ -1158,10 +1201,12 @@ function load() {
 }
 
 /* ---------- Rendering ---------- */
+// notes, a checklist or attachments can be shown on the card itself
+const hasDetails = n => !!(n.notes.trim() || n.attachments.length || n.checklist.length);
 function cardFor(n, memo, q) {
   const ch = childrenOf(n.id);
   let cls = 'node type-' + n.type + (n.parentId ? '' : ' root') + (n.done ? ' done' : '') + (n.id === sel ? ' selected' : '') +
-    (n.expanded && (n.notes.trim() || n.attachments.length) ? ' expanded' : '');
+    (n.expanded && hasDetails(n) ? ' expanded' : '');
   if (q) cls += matches(n, q) ? ' match' : ' dim';
   const typeIcon = n.type === 'task' ? '' : `<span class="ic">${icon(TYPES[n.type][0])}</span>`;
   let html = `<div class="row"><button class="chk" title="Mark done (Space)" aria-label="Toggle done">${n.done ? icon('check') : ''}</button>` +
@@ -1178,8 +1223,10 @@ function cardFor(n, memo, q) {
   if (di) meta.push(`<span class="pill due ${di.cls}" title="${n.startDate ? 'Start ' + shortDate(n.startDate) + ' · ' : ''}Due ${shortDate(n.dueDate)}">${icon('calendar')}${di.txt}</span>`);
   else if (n.startDate) meta.push(`<span class="pill" title="Start date">${icon('clock')}${shortDate(n.startDate)}</span>`);
   if (REPEAT[n.repeat]) meta.push(`<span class="pill rep" title="Repeats ${REPEAT[n.repeat][0].toLowerCase()}. When it's done, the next one is created.">${icon('repeat')}${REPEAT[n.repeat][1]}</span>`);
-  const hasDetails = n.notes.trim() || n.attachments.length;
-  if (hasDetails) meta.push(n.expanded
+  const steps = n.checklist.length, stepsDone = n.checklist.filter(c => c.done).length;
+  if (steps) meta.push(`<button class="pill ckp${stepsDone === steps ? ' full' : ''}${n.expanded ? ' on' : ''}" ` +
+    `title="Checklist: ${stepsDone} of ${steps} steps done (click to ${n.expanded ? 'hide' : 'show'} them)">${icon('checklist')}${stepsDone}/${steps}</button>`);
+  if (n.notes.trim() || n.attachments.length) meta.push(n.expanded
     ? `<button class="pill xp on" title="Hide details (E)">${icon('chevronUp')}Hide details</button>`
     : `<button class="pill xp" title="Show notes and attachments (E)">${n.notes.trim() ? icon('notes') : ''}` +
       `${n.attachments.length ? icon('clip') + n.attachments.length : ''}${icon('chevronDown')}</button>`);
@@ -1200,11 +1247,14 @@ function cardFor(n, memo, q) {
     const p = prog(n, memo), pct = Math.round(p.done / p.total * 100);
     html += `<div class="prog${pct === 100 ? ' full' : ''}"><div class="bar"><i style="width:${pct}%"></i></div><span>${p.done}/${p.total} · ${pct}%</span></div>`;
   }
-  if (n.expanded && hasDetails) {
+  if (n.expanded && hasDetails(n)) {
     const imgs = n.attachments.map((a, i) => [a, i]).filter(([a]) => a.type.startsWith('image/'));
     const others = n.attachments.map((a, i) => [a, i]).filter(([a]) => !a.type.startsWith('image/'));
     html += '<div class="xbody">' +
       (n.notes.trim() ? `<div class="xnotes">${linkify(n.notes.trim())}</div>` : '') +
+      (steps ? `<div class="xcheck">${n.checklist.slice(0, 12).map((c, i) => `<button class="xck${c.done ? ' on' : ''}" data-ci="${i}" title="${c.done ? 'Not done yet' : 'Mark this step done'}">` +
+        `<span class="box">${c.done ? icon('check') : ''}</span><span>${esc(c.text) || '<i class="ph">Empty step</i>'}</span></button>`).join('')}` +
+        `${steps > 12 ? `<span class="xmore">+${steps - 12} more steps</span>` : ''}</div>` : '') +
       (imgs.length ? `<div class="xthumbs">${imgs.map(([a, i]) => `<button class="xfile xthumb" data-idx="${i}" title="${esc(a.name)}"><img alt="" data-fid="${a.id}"></button>`).join('')}</div>` : '') +
       (others.length ? `<div class="xdocs">${others.map(([a, i]) => `<button class="xfile xdoc" data-idx="${i}" title="Open ${esc(a.name)}">${icon('file')}<span>${esc(a.name)}</span></button>`).join('')}</div>` : '') +
       '</div>';
@@ -1559,6 +1609,21 @@ function renderSwatches(n) {
   custom.style.setProperty('--c', cur);
 }
 function setVal(el, v) { if (document.activeElement !== el && el.value !== v) el.value = v; }
+// rebuilt only when steps are added, removed or ticked, so typing in a step keeps its cursor
+function renderChecklist(n) {
+  const box = $('#fChecklist'), key = n.id + ':' + n.checklist.map(c => c.id + (c.done ? '+' : '-')).join(',');
+  const done = n.checklist.filter(c => c.done).length;
+  $('#fCheckCount').textContent = n.checklist.length ? `${done}/${n.checklist.length}` : '';
+  if (box.dataset.key === key) {
+    box.querySelectorAll('.ck-text').forEach((el, i) => setVal(el, n.checklist[i].text));
+    return;
+  }
+  box.dataset.key = key;
+  box.innerHTML = n.checklist.map((c, i) =>
+    `<div class="ck-row${c.done ? ' done' : ''}" data-ci="${i}"><input type="checkbox" class="ck-box"${c.done ? ' checked' : ''} aria-label="Step done">` +
+    `<input class="ck-text" value="${esc(c.text)}" aria-label="Step" maxlength="500">` +
+    `<button class="iconbtn ck-del" title="Remove step" aria-label="Remove step">${icon('x')}</button></div>`).join('');
+}
 function renderPanel() {
   const n = sel && byId.get(sel);
   $('#details').hidden = !n;
@@ -1570,6 +1635,7 @@ function renderPanel() {
   setVal($('#fNotes'), n.notes);
   setVal($('#fRemark'), n.remark);
   renderFiles(n);
+  renderChecklist(n);
   // roots pick a team (+ extra people); everything below is assigned to a team or one person
   $('#teamFields').hidden = !!n.parentId;
   $('#assignWrap').hidden = !n.parentId;
@@ -1705,7 +1771,7 @@ const visibleH = r => PHONE.matches && !$('#details').hidden ? Math.max(120, $('
 // never sits on top of other cards. One undo step covers both.
 function toggleExpand(id) {
   const n = byId.get(id);
-  if (!n || !(n.notes.trim() || n.attachments.length)) { if (n) toast('Add notes or attachments to show them on the card'); return; }
+  if (!n || !hasDetails(n)) { if (n) toast('Add notes, a checklist or attachments to show them on the card'); return; }
   snapshot();
   n.expanded = !n.expanded;
   render();
@@ -1808,6 +1874,7 @@ function repeatTask(n) {
     ...x, id: ids.get(x.id), parentId: x === n ? n.parentId : ids.get(x.parentId), y: x.y + dy,
     done: false, doneAt: null, remark: '', attachments: [], expanded: false, collapsed: false, createdAt: Date.now(),
     teamIds: [...x.teamIds], members: [...x.members], series: x === n ? n.series || n.id : x.series,
+    checklist: x.checklist.map(c => ({ ...c, id: uid(), done: false })),
     startDate: move(x.startDate), dueDate: x === n ? due : move(x.dueDate)
   }));
   n.repeat = null;
@@ -2372,7 +2439,8 @@ $('#nodes').addEventListener('click', e => {
   if (e.target.closest('.chk')) toggleDone(id);
   else if (e.target.closest('.add')) addChild(id);
   else if (e.target.closest('.tog')) { snapshot(); const n = byId.get(id); n.collapsed = !n.collapsed; render(); autoArrange(true); }
-  else if (e.target.closest('.xp')) toggleExpand(id);
+  else if (e.target.closest('.xp, .ckp')) toggleExpand(id);
+  else if (e.target.closest('.xck')) toggleStep(id, +e.target.closest('.xck').dataset.ci);
   else if (e.target.closest('.xfile')) {
     const a = byId.get(id)?.attachments[+e.target.closest('.xfile').dataset.idx];
     if (a) openAttachment(a);
@@ -2672,7 +2740,9 @@ function reportRows(roots) {
       pct: pr ? pr.done / pr.total : null, progress: pr ? `${pr.done}/${pr.total}` : '',
       repeat: REPEAT[n.repeat]?.[0] || '',
       doneOn: n.done && n.doneAt ? fmtDate(new Date(n.doneAt)) : null,
-      files: n.attachments.map(a => a.name).join(', ')
+      files: n.attachments.map(a => a.name).join(', '),
+      steps: n.checklist.length ? `${n.checklist.filter(c => c.done).length}/${n.checklist.length}: ` +
+        n.checklist.map(c => (c.done ? '✓ ' : '○ ') + c.text).join('; ') : ''
     });
     for (const c of ch) walk(c, d + 1, root);
   };
@@ -2777,13 +2847,13 @@ function reportExcel(id) {
   ];
   const tasks = [
     ['Project / idea', 'Item', 'Type', 'Status', 'Priority', 'Assigned to', 'Start', 'Due', 'Completed on', 'Progress', 'Sub-tasks done',
-      'Repeats', 'Notes', 'Remark', 'Attachments'].map(H),
+      'Repeats', 'Checklist', 'Notes', 'Remark', 'Attachments'].map(H),
     ...rows.map(x => {
       const top = !x.d, t = top ? 3 : x.n.done ? 5 : 0, dt = top ? 4 : x.n.done ? 6 : 2, wrap = top ? 3 : 10;
       return [{ v: x.root.title || 'Untitled', s: t }, { v: '    '.repeat(x.d) + (x.n.title || 'Untitled'), s: t }, { v: x.type, s: t },
         { v: x.status, s: top ? 3 : x.late ? 7 : t }, { v: x.prio, s: x.prio === 'High' && !x.n.done ? 7 : t }, { v: x.who, s: t },
         { v: x.n.startDate, date: 1, s: dt }, { v: x.n.dueDate, date: 1, s: x.late && !top ? 11 : dt }, { v: x.doneOn, date: 1, s: dt },
-        { v: x.pct, s: top ? 9 : 8 }, { v: x.progress, s: t }, { v: x.repeat, s: t },
+        { v: x.pct, s: top ? 9 : 8 }, { v: x.progress, s: t }, { v: x.repeat, s: t }, { v: x.steps, s: wrap },
         { v: x.n.notes.trim(), s: wrap }, { v: x.n.remark.trim(), s: wrap }, { v: x.files, s: wrap }];
     })
   ];
@@ -2806,7 +2876,7 @@ function reportExcel(id) {
 <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: 'xl/styles.xml', data: XL_STYLES },
     { name: 'xl/worksheets/sheet1.xml', data: xlSheet([34, 10, 8, 8, 8, 10, 11, 13, 13, 40], summary) },
-    { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 50, 36, 30], tasks) }
+    { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 40, 50, 36, 30], tasks) }
   ], ct + '.sheet');
   saveBlob(blob, `mindmap-report-${file}-${todayStr()}.xlsx`);
   toast('Excel report downloaded');
@@ -2832,6 +2902,7 @@ function reportPrint(id) {
       mine.map(r => `<tr class="${r.n.done ? 'done' : ''}"><td class="rp-t" style="--d:${r.d - 1}">${r.pct != null ? '<b>' : ''}<span>${esc(r.n.title || 'Untitled')}</span>${r.pct != null ? '</b>' : ''}` +
         `${r.repeat ? ` <small>(${r.repeat.toLowerCase()})</small>` : ''}${r.progress ? ` <small>${r.progress}</small>` : ''}` +
         `${r.n.notes.trim() ? `<div class="rp-note">${esc(r.n.notes.trim())}</div>` : ''}${r.n.remark.trim() ? `<div class="rp-note">Remark: ${esc(r.n.remark.trim())}</div>` : ''}` +
+        `${r.steps ? `<div class="rp-note">Checklist ${esc(r.steps)}</div>` : ''}` +
         `${r.files ? `<div class="rp-note">Attachments: ${esc(r.files)}</div>` : ''}</td>` +
         `<td class="nw st${r.late ? ' late' : ''}">${r.status}</td><td class="nw ${r.prio && !r.n.done ? 'p-' + r.n.priority : ''}">${r.prio}</td><td>${esc(r.who)}</td>` +
         `<td class="nw">${d(r.n.startDate)}</td><td class="nw${r.late ? ' late' : ''}">${d(r.n.dueDate)}</td><td class="nw">${d(r.doneOn)}</td></tr>`).join('') + '</tbody></table>';
@@ -2887,6 +2958,7 @@ function icsCalendar(roots, name) {
       PRIO[n.priority] && `Priority: ${PRIO[n.priority][0]}`,
       REPEAT[n.repeat] && `Repeats: ${REPEAT[n.repeat][0].toLowerCase()}`,
       n.notes.trim(),
+      n.checklist.length && `Checklist:\n${n.checklist.map(c => (c.done ? '☑ ' : '☐ ') + c.text).join('\n')}`,
       'From Mind Map Scheduler'
     ].filter(Boolean).join('\n');
     lines.push('BEGIN:VEVENT', `UID:${n.series || n.id}@mindmap-scheduler`, `DTSTAMP:${stamp}`,
@@ -3149,6 +3221,80 @@ $('#fDoneAt').addEventListener('change', e => {
   render();
 });
 $('#fTitle').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+// --- checklist: small steps inside one task
+function toggleStep(id, i) {
+  const n = byId.get(id), c = n?.checklist[i];
+  if (!c) return;
+  snapshot();
+  c.done = !c.done;
+  render();
+  const left = n.checklist.filter(x => !x.done).length;
+  if (c.done && !left && n.checklist.length > 1 && !n.done) toast(`All ${n.checklist.length} steps done — tick the task when you're ready`);
+}
+function addStep(n, text, at = n.checklist.length) {
+  snapshot();
+  const c = { id: uid(), text, done: false };
+  n.checklist.splice(at, 0, c);
+  render();
+  return c;
+}
+const stepInput = i => $('#fChecklist').querySelector(`.ck-row[data-ci="${i}"] .ck-text`);
+$('#fCheckAdd').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const n = byId.get(sel), text = e.target.value.trim();
+  if (!n || !text) return;
+  e.target.value = '';
+  addStep(n, text);
+});
+$('#fChecklist').addEventListener('change', e => {
+  const row = e.target.closest('.ck-row'), n = byId.get(sel);
+  if (!row || !n) return;
+  if (e.target.classList.contains('ck-box')) toggleStep(n.id, +row.dataset.ci);
+});
+// a step left empty goes away when you click elsewhere (keeping the cursor where you clicked)
+$('#fChecklist').addEventListener('focusout', e => {
+  const row = e.target.closest('.ck-row'), n = byId.get(sel), i = row ? +row.dataset.ci : -1;
+  if (!n || !e.target.isConnected || !e.target.classList.contains('ck-text') || n.checklist[i]?.text.trim() !== '') return;
+  const next = e.relatedTarget?.closest?.('.ck-row'), j = next ? +next.dataset.ci : -1;
+  n.checklist.splice(i, 1);
+  render();
+  if (j >= 0) stepInput(j > i ? j - 1 : j)?.focus();
+});
+$('#fChecklist').addEventListener('focusin', e => { if (e.target.classList.contains('ck-text')) editSnap = false; });
+$('#fChecklist').addEventListener('input', e => {
+  const row = e.target.closest('.ck-row'), n = byId.get(sel), c = row && n?.checklist[+row.dataset.ci];
+  if (!c || !e.target.classList.contains('ck-text')) return;
+  if (!editSnap) { snapshot(); editSnap = true; }
+  c.text = e.target.value;
+  render();
+});
+$('#fChecklist').addEventListener('keydown', e => {
+  const row = e.target.closest('.ck-row'), n = byId.get(sel);
+  if (!row || !n || !e.target.classList.contains('ck-text')) return;
+  const i = +row.dataset.ci;
+  if (e.key === 'Enter') {
+    // Enter starts a new step right below this one
+    e.preventDefault();
+    if (!e.target.value.trim()) { $('#fCheckAdd').focus(); return; } // the empty step is tidied away as focus leaves
+    addStep(n, '', i + 1);
+    stepInput(i + 1)?.focus();
+  } else if (e.key === 'Backspace' && !e.target.value) {
+    // Backspace in an empty step removes it
+    e.preventDefault();
+    snapshot();
+    n.checklist.splice(i, 1);
+    render();
+    (stepInput(i - 1) || $('#fCheckAdd')).focus();
+  } else if (e.key === 'Escape') e.target.blur();
+});
+$('#fChecklist').addEventListener('click', e => {
+  const row = e.target.closest('.ck-row'), n = byId.get(sel);
+  if (!row || !n || !e.target.closest('.ck-del')) return;
+  snapshot();
+  n.checklist.splice(+row.dataset.ci, 1);
+  render();
+});
 $('#dAdd').onclick = () => sel && addChild(sel);
 $('#dExport').onclick = () => sel && exportBranch(sel);
 $('#dDel').onclick = () => sel && deleteNode(sel);
