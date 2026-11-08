@@ -660,7 +660,7 @@ body.dropping::after, body.reparent::after {
     <button class="btn icon" id="redoBtn" title="Redo (Ctrl+Y)" aria-label="Redo"><span data-i="redo"></span></button>
     <button class="btn" id="exportBtn" title="Download a backup"><span data-i="download"></span>Export</button>
     <button class="btn" id="importBtn" title="Load a backup — or drag a .json file onto the page"><span data-i="upload"></span>Import</button>
-    <button class="btn" id="reportBtn" title="A report people can read: Excel or PDF"><span data-i="file"></span>Report</button>
+    <button class="btn" id="reportBtn" title="A report people can read (Excel or PDF), or the dates as a calendar file"><span data-i="file"></span>Report</button>
     <input type="file" id="importFile" accept=".json,application/json" hidden>
     <button class="btn primary" id="installBtn" title="Install as an app on this computer" hidden><span data-i="download"></span>Install app</button>
     <button class="btn icon" id="themeBtn" title="Theme" aria-label="Theme"></button>
@@ -763,7 +763,7 @@ body.dropping::after, body.reparent::after {
       <button class="btn" id="dAdd"><span data-i="plus"></span>Sub-task</button>
       <button class="btn" id="dMove" title="Move it, with its sub-tasks, under another item (M)"><span data-i="move"></span>Move</button>
       <button class="btn" id="dExport" title="Download only this item and everything under it"><span data-i="download"></span>Export</button>
-      <button class="btn" id="dReport" title="A readable report of this item: Excel or PDF"><span data-i="file"></span>Report</button>
+      <button class="btn" id="dReport" title="A readable report of this item (Excel or PDF), or its dates as a calendar file"><span data-i="file"></span>Report</button>
       <button class="btn danger" id="dDel"><span data-i="trash"></span>Delete</button>
     </div>
     <div class="keys">
@@ -1035,7 +1035,8 @@ function makeNode(o) {
   return Object.assign({
     id: uid(), parentId: null, type: 'task', title: 'New task', notes: '', remark: '', x: 0, y: 0, color: null,
     teamIds: [], members: [], assignee: '', assigneeTeam: null, attachments: [], expanded: false,
-    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null, repeat: null
+    done: false, collapsed: false, startDate: null, dueDate: null, createdAt: Date.now(), doneAt: null, priority: null, repeat: null,
+    series: null
   }, o);
 }
 let saveTimer;
@@ -1111,7 +1112,8 @@ function sanitize(d) {
       dueDate: isDate(r.dueDate) ? r.dueDate : null,
       createdAt: +r.createdAt || Date.now(), doneAt: +r.doneAt || null,
       priority: PRIO[r.priority] ? r.priority : null,
-      repeat: REPEAT[r.repeat] ? r.repeat : null
+      repeat: REPEAT[r.repeat] ? r.repeat : null,
+      series: typeof r.series === 'string' ? r.series : null
     }));
   }
   const m = new Map(nodes.map(n => [n.id, n]));
@@ -1805,7 +1807,7 @@ function repeatTask(n) {
   const copies = branch.map(x => makeNode({
     ...x, id: ids.get(x.id), parentId: x === n ? n.parentId : ids.get(x.parentId), y: x.y + dy,
     done: false, doneAt: null, remark: '', attachments: [], expanded: false, collapsed: false, createdAt: Date.now(),
-    teamIds: [...x.teamIds], members: [...x.members],
+    teamIds: [...x.teamIds], members: [...x.members], series: x === n ? n.series || n.id : x.series,
     startDate: move(x.startDate), dueDate: x === n ? due : move(x.dueDate)
   }));
   n.repeat = null;
@@ -2596,14 +2598,14 @@ $('#zoomIn').onclick = () => zoomCenter(1.2);
 $('#zoomOut').onclick = () => zoomCenter(1 / 1.2);
 $('#fitBtn').onclick = fitView;
 
-function download(data, name) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+function saveBlob(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+const download = (data, name) => saveBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name);
 const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'item';
 $('#exportBtn').onclick = async () => {
   download({ ...state, files: await packFiles(state.nodes) }, `mindmap-${todayStr()}.json`);
@@ -2806,11 +2808,7 @@ function reportExcel(id) {
     { name: 'xl/worksheets/sheet1.xml', data: xlSheet([34, 10, 8, 8, 8, 10, 11, 13, 13, 40], summary) },
     { name: 'xl/worksheets/sheet2.xml', data: xlSheet([28, 46, 9, 15, 10, 22, 13, 13, 14, 10, 14, 13, 50, 36, 30], tasks) }
   ], ct + '.sheet');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `mindmap-report-${file}-${todayStr()}.xlsx`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  saveBlob(blob, `mindmap-report-${file}-${todayStr()}.xlsx`);
   toast('Excel report downloaded');
 }
 // --- PDF: a clean printable page; the print window's "Save as PDF" makes the file
@@ -2846,16 +2844,86 @@ function reportPrint(id) {
   addEventListener('afterprint', cleanUp);
   print();
 }
+/* ---------- Calendar file (.ics) ---------- */
+// Unfinished items with dates become all-day events that Google Calendar, Outlook or a phone's calendar can import,
+// so reminders work even while the app is closed. Each event keeps the item's id, so importing a newer file
+// updates the events instead of adding them twice.
+const icsText = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+// lines may be at most 75 bytes; longer ones continue on the next line after a space
+function icsFold(line) {
+  const enc = new TextEncoder(), parts = [];
+  let cur = '', size = 0;
+  for (const ch of line) {
+    const b = enc.encode(ch).length;
+    if (size + b > (parts.length ? 74 : 75)) { parts.push(cur); cur = ''; size = 0; }
+    cur += ch;
+    size += b;
+  }
+  parts.push(cur);
+  return parts.join('\r\n ');
+}
+function icsRule(n, date) {
+  if (n.repeat !== 'monthly') return n.repeat === 'daily' ? 'FREQ=DAILY' : 'FREQ=WEEKLY';
+  // on the 29th-31st, shorter months use their last day, as the app does
+  const day = +date.slice(8);
+  return day > 28 ? `FREQ=MONTHLY;BYMONTHDAY=${Array.from({ length: day - 27 }, (_, i) => 28 + i).join(',')};BYSETPOS=-1` : 'FREQ=MONTHLY';
+}
+function icsCalendar(roots, name) {
+  const ymd = s => s.replace(/-/g, ''), long = s => FMT.date.format(parseDate(s));
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const link = /^https?:$/.test(location.protocol) ? location.origin + location.pathname : '';
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Mind Map Scheduler//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    `X-WR-CALNAME:${icsText(name)}`];
+  let count = 0;
+  for (const r of roots) for (const n of [r, ...descendants(r.id)]) {
+    const date = n.dueDate || n.startDate;
+    if (n.done || !date) continue;
+    count++;
+    const title = n.title || 'Untitled', team = teamById(n.assigneeTeam), path = ancestors(n).reverse().map(a => a.title || 'Untitled');
+    const desc = [
+      path.length && `In: ${path.join(' › ')}`,
+      n.dueDate ? n.startDate && n.startDate !== n.dueDate && `Starts ${long(n.startDate)}, due ${long(n.dueDate)}` : 'Start date (no due date yet)',
+      (team || n.assignee) && `Assigned to: ${team ? team.name + ' (team)' : n.assignee}`,
+      PRIO[n.priority] && `Priority: ${PRIO[n.priority][0]}`,
+      REPEAT[n.repeat] && `Repeats: ${REPEAT[n.repeat][0].toLowerCase()}`,
+      n.notes.trim(),
+      'From Mind Map Scheduler'
+    ].filter(Boolean).join('\n');
+    lines.push('BEGIN:VEVENT', `UID:${n.series || n.id}@mindmap-scheduler`, `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${ymd(date)}`, `DTEND;VALUE=DATE:${ymd(shiftDate(date, 1))}`,
+      `SUMMARY:${icsText(n.dueDate ? title : 'Start: ' + title)}`, `DESCRIPTION:${icsText(desc)}`,
+      `CATEGORIES:${icsText(rootOf(n).title || 'Untitled')}`, 'TRANSP:TRANSPARENT');
+    if (PRIO[n.priority]) lines.push(`PRIORITY:${{ high: 1, medium: 5, low: 9 }[n.priority]}`);
+    if (REPEAT[n.repeat]) lines.push(`RRULE:${icsRule(n, date)}`);
+    if (link) lines.push(`URL:${link}`);
+    // a reminder at 9:00 the day before (Google Calendar uses its own default reminders instead)
+    lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsText(title)}`, 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return { count, text: lines.map(icsFold).join('\r\n') + '\r\n' };
+}
+async function exportCalendar(id) {
+  const { roots, title, file } = reportScope(id);
+  const { count, text } = icsCalendar(roots, id ? title : 'Mind Map Scheduler');
+  if (!count) { toast('Nothing to add: no unfinished items have dates'); return; }
+  saveBlob(new Blob([text], { type: 'text/calendar;charset=utf-8' }), `mindmap-calendar-${file}-${todayStr()}.ics`);
+  await choose('Calendar file saved', `${count} item${count === 1 ? '' : 's'} with dates, each with a reminder the day before. ` +
+    'Outlook, Apple Calendar and phones: open the downloaded file. Google Calendar: Settings → Import & export → Import. ' +
+    'After changing dates, export again: most calendar apps update the same events instead of adding copies.', [{ label: 'OK', value: null, primary: true }]);
+}
 async function openReport(id) {
   const { title } = reportScope(id);
   const how = await choose('Report', `A report of "${title}" that anyone can read. ` +
-    'PDF opens the print window: pick "Save as PDF" as the printer.', [
+    'PDF opens the print window: pick "Save as PDF" as the printer. ' +
+    'Calendar saves the dates as a file for Google Calendar, Outlook or your phone.', [
     { label: 'Cancel', value: null },
+    { label: 'Calendar', value: 'ics' },
     { label: 'PDF', value: 'pdf' },
     { label: 'Excel', value: 'xlsx', primary: true }
   ]);
   if (how === 'xlsx') reportExcel(id);
   else if (how === 'pdf') reportPrint(id);
+  else if (how === 'ics') exportCalendar(id);
 }
 $('#reportBtn').onclick = () => openReport(null);
 $('#dReport').onclick = () => sel && openReport(sel);
