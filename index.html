@@ -2685,8 +2685,10 @@ $('#agenda').addEventListener('change', e => {
 document.addEventListener('click', e => { if (e.target.closest('button')) e.target.closest('button').blur(); });
 
 // shortcuts stay off only while the cursor is in a field you type into (not dropdowns, ticks or dates)
-const TYPED = ['text', 'search', 'email', 'url', 'tel', 'number', 'password'];
-const isTyping = t => t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && TYPED.includes(t.type));
+// keys pressed in a text box, a date box or a drop-down belong to it, not to the map shortcuts
+// (otherwise Backspace in the Due box would delete the task, and "1" would set its priority)
+const NOT_TYPED = ['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'file', 'color', 'image'];
+const isTyping = t => t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && !NOT_TYPED.includes(t.type));
 function arrangeMap() {
   autoArrange();
   fitView();
