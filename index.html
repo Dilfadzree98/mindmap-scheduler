@@ -438,6 +438,10 @@ kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 
 /* ---------- Teams dialog ---------- */
 .dlg.wide { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
 .dlg-h { display: flex; align-items: center; justify-content: space-between; }
+/* ---------- Duplicate dialog ---------- */
+.dup-field { margin-top: 12px; }
+.dup-field input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+#dpShift { margin: 6px 0 0; font-size: 12.5px; }
 .new-team { display: flex; gap: 8px; margin: 4px 0 14px; }
 .new-team input, .team-add {
   flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
@@ -833,6 +837,7 @@ body.dropping::after, body.reparent::after {
     <div class="btns">
       <button class="btn" id="dAdd"><span data-i="plus"></span>Sub-task</button>
       <button class="btn" id="dMove" title="Move it, with its sub-tasks, under another item (M)"><span data-i="move"></span>Move</button>
+      <button class="btn" id="dDup" title="Copy it with everything under it, e.g. to reuse a project as a template (D)"><span data-i="copy"></span>Duplicate</button>
       <button class="btn" id="dExport" title="Download only this item and everything under it"><span data-i="download"></span>Export</button>
       <button class="btn" id="dReport" title="A readable report of this item (Excel or PDF), or its dates as a calendar file"><span data-i="file"></span>Report</button>
       <button class="btn danger" id="dDel"><span data-i="trash"></span>Delete</button>
@@ -842,6 +847,7 @@ body.dropping::after, body.reparent::after {
       <kbd>Space</kbd> mark done · <kbd>F2</kbd> rename<br>
       <kbd>E</kbd> show details on card · <kbd>Del</kbd> delete<br>
       <kbd>M</kbd> move under another item, or drag the card onto it<br>
+      <kbd>D</kbd> duplicate, e.g. to reuse a project as a template<br>
       <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> high / medium / low priority · <kbd>0</kbd> none<br>
       <kbd>R</kbd> arrange the map · <kbd>T</kbd> timeline (drag bars to change dates) · <kbd>Esc</kbd> deselect<br>
       <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo
@@ -887,6 +893,18 @@ body.dropping::after, body.reparent::after {
     <div id="mvList" class="mv-list"></div>
   </div>
 </div>
+<div id="dupDlg" class="overlay" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dpTitle">
+    <h3 id="dpTitle" class="dlg-h"><span>Duplicate</span><button class="iconbtn" id="dpClose" title="Close (Esc)" aria-label="Close"><span data-i="x"></span></button></h3>
+    <p id="dpMsg"></p>
+    <div class="dup-field"><label for="dpName">Name of the copy</label><input id="dpName" autocomplete="off"></div>
+    <div class="dup-field" id="dpDates"><label for="dpStart">First date in the copy</label><input id="dpStart" type="date"><p id="dpShift"></p></div>
+    <div class="btns">
+      <button class="btn" id="dpCancel">Cancel</button>
+      <button class="btn primary" id="dpOk"><span data-i="copy"></span>Duplicate</button>
+    </div>
+  </div>
+</div>
 <datalist id="allPeople"></datalist>
 <div id="viewer" class="overlay" hidden title="Click to close">
   <figure><img id="viewerImg" alt=""><figcaption id="viewerCap"></figcaption></figure>
@@ -921,6 +939,7 @@ const ICONS = {
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   checklist: '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
   more: '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
   bell: '<path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/>',
@@ -2003,8 +2022,8 @@ function repeatTask(n) {
   const shift = Math.round((parseDate(due) - parseDate(from)) / 864e5);
   const move = s => s && shiftDate(s, shift);
   const branch = [n, ...descendants(n.id)];
-  // start just below the finished one; the map is tidied right after
-  const dy = Math.max(...branch.map(x => x.y + (sizes.get(x.id)?.h || 44))) + 16 - n.y;
+  // a hair below the finished one, so tidying the map (right after) puts the copy next to it
+  const dy = 0.5;
   const ids = new Map(branch.map(x => [x.id, uid()]));
   const copies = branch.map(x => makeNode({
     ...x, id: ids.get(x.id), parentId: x === n ? n.parentId : ids.get(x.parentId), y: x.y + dy,
@@ -2680,6 +2699,7 @@ document.addEventListener('keydown', e => {
   if (!$('#modal').hidden) { if (e.key === 'Escape') closeRemark(false); return; }
   if (!$('#choice').hidden) { if (e.key === 'Escape') choiceCancel?.(); return; }
   if (!$('#moveDlg').hidden) { if (e.key === 'Escape') closePicker(); return; }
+  if (!$('#dupDlg').hidden) { if (e.key === 'Escape') closeDup(); return; }
   if (!$('#remindDlg').hidden) { if (e.key === 'Escape') closeReminders(); return; }
   if (!$('#teamsDlg').hidden) {
     if (e.key === 'Escape') closeTeams();
@@ -2704,6 +2724,7 @@ document.addEventListener('keydown', e => {
   const keys = {
     Tab: () => addChild(sel), Enter: () => addSibling(sel), F2: () => startRename(sel), ' ': () => toggleDone(sel),
     e: () => toggleExpand(sel), E: () => toggleExpand(sel), m: () => openMove(sel), M: () => openMove(sel),
+    d: () => openDup(sel), D: () => openDup(sel),
     1: () => togglePriority('high'), 2: () => togglePriority('medium'), 3: () => togglePriority('low'), 0: () => togglePriority(null),
     Delete: () => deleteNode(sel), Backspace: () => deleteNode(sel), Escape: () => select(null)
   };
@@ -2897,6 +2918,74 @@ function addNodes(list, teams = []) {
   state.nodes.push(...added);
   return added.find(n => !n.parentId)?.id;
 }
+/* ---------- Duplicate (reuse a project as a template) ---------- */
+// The copy keeps the structure, notes, checklists, people and attachments but starts fresh: nothing ticked.
+// Picking a new first date moves every date in the copy by the same number of days.
+let dupId = null;
+const branchDates = n => [n, ...descendants(n.id)].flatMap(x => [x.startDate, x.dueDate]).filter(Boolean).sort();
+function openDup(id) {
+  const n = byId.get(id);
+  if (!n) return;
+  dupId = id;
+  const under = descendants(id).length, dates = branchDates(n), title = n.title || 'Untitled';
+  $('#dpMsg').textContent = `Copies "${title}"${under ? ` and the ${under} item${under === 1 ? '' : 's'} under it` : ''}, ` +
+    'with notes, checklists and attachments. Ticks and remarks are cleared, so the copy starts fresh.';
+  $('#dpName').value = `${title} (copy)`;
+  $('#dpDates').hidden = !dates.length;
+  $('#dpStart').value = dates[0] || '';
+  dupHint();
+  $('#dupDlg').hidden = false;
+  $('#dpName').focus();
+  $('#dpName').select();
+}
+function closeDup() { $('#dupDlg').hidden = true; dupId = null; }
+// how many days the dates move: the new first date minus the old one
+function dupShift() {
+  const n = byId.get(dupId), first = n && branchDates(n)[0], to = $('#dpStart').value;
+  return first && /^\d{4}-\d{2}-\d{2}$/.test(to) ? dayDiff(first, to) : 0;
+}
+function dupHint() {
+  const n = byId.get(dupId), dates = n ? branchDates(n) : [];
+  if (!dates.length) return;
+  const k = dupShift(), long = d => FMT.date.format(parseDate(shiftDate(d, k)));
+  const span = dates.length > 1 && dates[0] !== dates[dates.length - 1] ? `${long(dates[0])} – ${long(dates[dates.length - 1])}` : long(dates[0]);
+  $('#dpShift').textContent = k ? `Every date moves ${Math.abs(k)} day${Math.abs(k) === 1 ? '' : 's'} ${k > 0 ? 'later' : 'earlier'}: ${span}.`
+    : `Dates stay as they are (${span}). Pick a new first date to move them all.`;
+}
+function duplicateItem() {
+  const n = byId.get(dupId);
+  if (!n) { closeDup(); return; }
+  const k = dupShift(), name = $('#dpName').value.trim() || `${n.title || 'Untitled'} (copy)`;
+  closeDup();
+  snapshot();
+  const branch = [n, ...descendants(n.id)], move = s => s && shiftDate(s, k);
+  // a hair below the original, so tidying the map puts the copy right after it
+  const dy = 0.5;
+  const ids = new Map(branch.map(x => [x.id, uid()]));
+  const copies = branch.map(x => makeNode({
+    ...x, id: ids.get(x.id), parentId: x === n ? n.parentId : ids.get(x.parentId), y: x.y + dy,
+    title: x === n ? name : x.title, done: false, doneAt: null, remark: '', createdAt: Date.now(), series: null,
+    teamIds: [...x.teamIds], members: [...x.members], attachments: x.attachments.map(a => ({ ...a })),
+    checklist: x.checklist.map(c => ({ ...c, id: uid(), done: false })),
+    // links between the copied items point to the copies; links to other tasks stay as they are
+    dependsOn: x.dependsOn.map(id => ids.get(id) || id),
+    startDate: move(x.startDate), dueDate: move(x.dueDate)
+  }));
+  state.nodes.push(...copies);
+  index();
+  render();
+  autoArrange(true);
+  focusNode(copies[0].id);
+  toast(`Made "${name}"` + (k ? ` · dates ${Math.abs(k)} day${Math.abs(k) === 1 ? '' : 's'} ${k > 0 ? 'later' : 'earlier'}` : '') + ' · Ctrl+Z to undo');
+}
+$('#dpStart').addEventListener('input', dupHint);
+$('#dpOk').onclick = duplicateItem;
+$('#dpCancel').onclick = closeDup;
+$('#dpClose').onclick = closeDup;
+$('#dupDlg').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.tagName === 'INPUT' && !e.isComposing) { e.preventDefault(); duplicateItem(); } });
+$('#dupDlg').addEventListener('pointerdown', e => { if (e.target.id === 'dupDlg') closeDup(); });
+$('#dDup').onclick = () => sel && openDup(sel);
+
 /* ---------- Readable reports: Excel (.xlsx) and PDF (print) ---------- */
 // one row per item, in map order, with everything a person would want to read
 function reportRows(roots) {
@@ -3530,7 +3619,7 @@ $('#fFiles').addEventListener('click', e => {
 document.addEventListener('paste', e => {
   const files = [...(e.clipboardData?.files || [])];
   if (!files.length) return; // ordinary text pastes behave as usual
-  if (!$('#modal').hidden || !$('#choice').hidden || !$('#teamsDlg').hidden || !$('#moveDlg').hidden || !$('#remindDlg').hidden) return;
+  if (document.querySelector('.overlay:not([hidden])')) return; // a dialog is open
   e.preventDefault();
   const n = sel && byId.get(sel);
   if (!n) { toast('Select a task first, then paste to attach'); return; }
